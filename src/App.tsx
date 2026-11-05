@@ -178,14 +178,33 @@ function ConsoleApp() {
   const previousPage = useRef<PageKey>("dashboard");
   const settingsGeneration = useRef(0);
   const unlockedRef = useRef(false);
+  const settingsPicker = useRef<{ blurSeen: boolean } | null>(null);
   const [settingsUnlocked, setSettingsUnlocked] = useState(false);
   const [settingsLockVersion, setSettingsLockVersion] = useState(0);
   const lockSettings = useCallback(() => {
     settingsGeneration.current++;
+    settingsPicker.current = null;
     unlockedRef.current = false;
     setSettingsUnlocked(false);
     if (pageRef.current === "settings") setConfirmState(null);
     setSettingsLockVersion(n => n + 1);
+  }, []);
+  // This lease is available only while Settings is unlocked. It covers one
+  // native-dialog blur, not subsequent blurs, navigation, or hidden windows.
+  const beginSettingsFilePicker = useCallback((): (() => void) | null => {
+    if (pageRef.current !== "settings" || !unlockedRef.current || settingsPicker.current) return null;
+    const picker = { blurSeen: false };
+    settingsPicker.current = picker;
+    window.dispatchEvent(new Event("waypoint:settings-picker-state"));
+    return () => {
+      if (settingsPicker.current !== picker) return;
+      settingsPicker.current = null;
+      window.dispatchEvent(new Event("waypoint:settings-picker-state"));
+    };
+  }, []);
+  const captureSettingsAccess = useCallback(() => {
+    const generation = settingsGeneration.current;
+    return () => pageRef.current === "settings" && unlockedRef.current && settingsGeneration.current === generation;
   }, []);
   const guardedConfirm = useCallback((opts: ConfirmOpts) => {
     if (pageRef.current !== "settings") { setConfirmState(opts); return; }
@@ -215,19 +234,26 @@ function ConsoleApp() {
     let timer: number | undefined;
     const reset = () => {
       window.clearTimeout(timer);
-      if (unlockedRef.current && pageRef.current === "settings") timer = window.setTimeout(lockSettings, 60_000);
+      if (unlockedRef.current && pageRef.current === "settings" && !settingsPicker.current) timer = window.setTimeout(lockSettings, 60_000);
     };
     const lock = () => { window.clearTimeout(timer); if (pageRef.current === "settings") lockSettings(); };
+    const onBlur = () => {
+      const picker = settingsPicker.current;
+      if (picker && !picker.blurSeen) { picker.blurSeen = true; return; }
+      lock();
+    };
     const onVisibility = () => { if (document.visibilityState !== "visible") lock(); };
     const events = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart", "scroll"] as const;
     for (const event of events) window.addEventListener(event, reset, { passive: true, capture: true });
-    window.addEventListener("blur", lock);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("waypoint:settings-picker-state", reset);
     document.addEventListener("visibilitychange", onVisibility);
     reset();
     return () => {
       window.clearTimeout(timer);
       for (const event of events) window.removeEventListener(event, reset, true);
-      window.removeEventListener("blur", lock);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("waypoint:settings-picker-state", reset);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [settingsUnlocked, lockSettings]);
@@ -337,6 +363,8 @@ function ConsoleApp() {
         openCreate: (kind, presetDate) => setModal({ mode: "create", kind, presetDate }),
         openEdit: (entry: Entry) => setModal({ mode: "edit", entry }),
         confirm: guardedConfirm,
+        beginSettingsFilePicker,
+        captureSettingsAccess,
       }}
     >
       {!bootDone && (
