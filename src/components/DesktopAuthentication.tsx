@@ -19,7 +19,7 @@ export default function DesktopAuthentication({ onTheme, onAuthenticated }: {
 
   useEffect(() => {
     if (reduce) { setIntroDone(true); return; }
-    const timer = window.setTimeout(() => setIntroDone(true), 1700);
+    const timer = window.setTimeout(() => setIntroDone(true), 3500);
     return () => window.clearTimeout(timer);
   }, [reduce]);
 

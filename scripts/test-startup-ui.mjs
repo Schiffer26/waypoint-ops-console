@@ -17,7 +17,12 @@ async function open(options = {}) {
       openMain:async()=>{}, briefingDismiss:async()=>{}, capabilities:async()=>({}), notify:async()=>true,
       rendererReady:()=>{},onOpenCreate:()=>()=>{},onReminderDelivered:()=>()=>{},onReminderAction:()=>()=>{},
     };
-    window.startupTest = { getAttempts:()=>attempts, getStorageCalls:()=>storageCalls, allowRetry:()=>{failing = false;} };
+    window.startupTest = { getAttempts:()=>attempts, getStorageCalls:()=>storageCalls, allowRetry:()=>{failing = false;}, initAt:null, loginAt:null };
+    const observer = new MutationObserver(() => {
+      if (window.startupTest.initAt === null && document.querySelector('.system-init')) window.startupTest.initAt = performance.now();
+      if (window.startupTest.loginAt === null && document.querySelector('.auth-screen')) window.startupTest.loginAt = performance.now();
+    });
+    observer.observe(document, {childList:true, subtree:true});
   }, options);
   const page = await context.newPage();
   return {context,page};
@@ -33,7 +38,12 @@ try {
     const src = await page.locator('.system-init-logo img').getAttribute('src');
     assert(src.includes('waypoint-emblem.png'));
     assert.equal(await page.evaluate(() => window.startupTest.getStorageCalls()),0);
+    await page.waitForTimeout(2800);
+    assert(await page.getByRole('main',{name:'WAYPOINT system initialization'}).isVisible());
+    assert.equal(await page.getByRole('heading',{name:'CREATE OPERATOR'}).count(),0);
     await page.getByRole('heading',{name:'CREATE OPERATOR'}).waitFor({timeout:5000});
+    const introDuration = await page.evaluate(() => window.startupTest.loginAt - window.startupTest.initAt);
+    assert(introDuration >= 3500, `startup was visible for ${introDuration}ms, expected at least 3500ms`);
     assert.equal(await page.locator('#auth-confirm').count(),1);
     assert.equal(await page.evaluate(() => document.documentElement.dataset.theme),'light');
     assert.equal(await page.evaluate(() => window.startupTest.getStorageCalls()),0);
@@ -42,10 +52,10 @@ try {
   }
   // Waiting longer than the visual intro cannot advance the authentication gate.
   {
-    const {context,page} = await open({exists:true,theme:'dark',delay:2700});
+    const {context,page} = await open({exists:true,theme:'dark',delay:4700});
     await page.goto('http://127.0.0.1:5173/');
     await page.getByText('LOADING OPERATOR INTERFACE').waitFor();
-    await page.waitForTimeout(1900);
+    await page.waitForTimeout(3900);
     assert.equal(await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).count(),0);
     assert.equal(await page.getByText('OPERATOR GATE / READY').count(),0);
     assert.equal(await page.evaluate(() => document.documentElement.dataset.theme),'dark');
@@ -53,6 +63,19 @@ try {
     assert.equal(await page.locator('.auth-ambient').count(),1, 'existing login animations remain');
     await context.close();
     console.log('Delayed returning-user status and dark theme passed (mock bridge)');
+  }
+  // Appearance is also required, even when operator status is already known.
+  {
+    const {context,page} = await open({exists:true,theme:'light',appearanceDelay:4500});
+    await page.goto('http://127.0.0.1:5173/');
+    await page.getByText('INITIALIZING LOCAL CONSOLE').waitFor();
+    await page.waitForTimeout(3900);
+    assert(await page.getByRole('main',{name:'WAYPOINT system initialization'}).isVisible());
+    assert.equal(await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).count(),0);
+    assert.equal(await page.getByText('OPERATOR GATE / READY').count(),0);
+    await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).waitFor({timeout:5000});
+    await context.close();
+    console.log('Delayed appearance initialization passed (mock bridge)');
   }
   // Failure is fail-closed and offers retry, including reduced-motion timing.
   {
