@@ -21,6 +21,7 @@ try {
     await page.goto('http://127.0.0.1:5173/');
     await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).waitFor();
     await page.waitForFunction(t => document.documentElement.dataset.theme === t, theme);
+    assert.equal(await page.locator('.auth-emblem > i').count(), 0, 'no decorative line beside the card wordmark');
     const cardWordmark = page.locator('.auth-emblem-wordmark');
     assert(await cardWordmark.isVisible());
     assert.equal(await cardWordmark.evaluate(el => el.firstChild.textContent), 'WAYPOINT');

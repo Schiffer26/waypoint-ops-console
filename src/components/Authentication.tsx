@@ -63,7 +63,7 @@ export default function Authentication({ onAuthenticated, operatorExists }: { on
       <main className="auth-main">
         <motion.div className="auth-panel" {...entrance(.1)}>
           <div className="auth-panel-top"><span>IDENTITY VERIFICATION</span><span>01 / 01</span></div>
-          <motion.div className="auth-emblem" {...entrance(.18)}><span><img src={emblem} alt="" /></span><div className="auth-emblem-wordmark">WAYPOINT<small>PERSONAL OPERATIONS CONSOLE</small></div><i /></motion.div>
+          <motion.div className="auth-emblem" {...entrance(.18)}><span><img src={emblem} alt="" /></span><div className="auth-emblem-wordmark">WAYPOINT<small>PERSONAL OPERATIONS CONSOLE</small></div></motion.div>
           <motion.div {...entrance(.24)}><div className="auth-kicker"><span className="auth-dot" /> LOCAL SYSTEM // {setup ? "INITIAL SETUP" : "SECURE ACCESS"}</div><h1>{setup ? "CREATE OPERATOR" : "OPERATOR AUTHENTICATION"}</h1><p className="auth-description">{setup ? "Initialize the authorized operator for this local console." : "Verify your operator credentials to access the operations console."}</p></motion.div>
           <motion.form onSubmit={submit} className="auth-form" {...entrance(.34)}>
             <label htmlFor="auth-operator">OPERATOR <span>01</span></label>
