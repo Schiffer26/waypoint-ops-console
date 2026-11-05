@@ -561,11 +561,14 @@ tray retains the session. Tray directives wait until the authenticated console
 is ready. Console persistence is not hydrated before authentication.
 
 The Daily Briefing opens automatically after console initialization and its
-boot animation on normal launches and Windows startup when the existing
-`briefingAtLogin` preference is enabled. Windows startup remains tray-dormant
-when that preference is disabled. Disabling
+boot animation on Windows startup when the existing `briefingAtLogin`
+preference is enabled. A normal manual launch opens only the console. Windows
+startup remains tray-dormant when that preference is disabled. Disabling
 that preference suppresses automatic opening; the Settings preview remains
-available.
+available. Automatic requests wait for the console boot-completion handshake;
+if the renderer crashes before it can send that signal, the request remains
+queued until a console renderer completes boot. The tray can still open a
+briefing manually.
 
 The login screen can request only the local appearance preference and the auth
 operations. The separate Daily Briefing window can request a read-only,

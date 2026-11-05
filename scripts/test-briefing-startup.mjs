@@ -22,42 +22,70 @@ try {
   await import('../dist-electron/main.js');
   await new Promise(r => setImmediate(r));
   if (process.platform === 'win32') assert.equal(app.appUserModelId, 'com.waypoint.console', 'Windows app identity should be registered');
-  let briefing = windows.find(w => w.options.title.includes('Daily Briefing'));
+  const briefings = () => windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing'));
+  let briefing = briefings()[0];
   let main = windows.find(w => w.options.title.includes('Personal Operations'));
-  if (scenario.includes('disabled')) {
-    if (scenario === 'startup-disabled') {
-      assert(!main && !briefing, 'disabled Windows startup remains tray-dormant');
-      globalThis.__waypointDebug.showMainWindow();
-      main = windows.find(w => w.options.title.includes('Personal Operations'));
-    }
-    assert(main && !briefing, 'disabled preference must suppress automatic briefing');
-  } else {
-    assert(main && !briefing, `${scenario} must wait for console boot`);
-    const event = {sender: main.webContents, senderFrame: main.webContents.mainFrame};
-    ipcMain.emit('waypoint:boot-complete', {sender: main.webContents, senderFrame: {}});
-    assert.equal(windows.filter(w => w.options.title.includes('Daily Briefing')).length, 0, 'subframes cannot signal readiness');
+  if (scenario === 'startup-disabled') {
+    assert(!main && !briefing, 'disabled Windows startup remains tray-dormant');
+    app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
+    await new Promise(r => setImmediate(r));
+    assert.equal(windows.length, 0, 'disabled second startup stays tray-dormant');
     app.emit('second-instance', {}, ['waypoint']);
     await new Promise(r => setImmediate(r));
-    assert.equal(windows.filter(w => w.options.title.includes('Daily Briefing')).length, 0, 'repeated launch still waits for boot');
-    ipcMain.emit('waypoint:boot-complete', event);
-    ipcMain.emit('waypoint:boot-complete', event);
-    briefing = windows.find(w => w.options.title.includes('Daily Briefing'));
-    assert(briefing, `${scenario} should open briefing after boot`);
+    main = windows.find(w => w.options.title.includes('Personal Operations'));
+  }
+  assert(main && !briefing, 'initial launch must not open briefing before boot');
+  assert.equal(windows.filter(w => w.options.title.includes('Personal Operations')).length, 1, 'only one main window');
+  const event = {sender: main.webContents, senderFrame: main.webContents.mainFrame};
+  ipcMain.emit('waypoint:boot-complete', {sender: main.webContents, senderFrame: {}});
+  assert.equal(briefings().length, 0, 'subframes cannot signal readiness');
+  // A manual activation never queues an automatic briefing.
+  app.emit('second-instance', {}, ['waypoint']);
+  await new Promise(r => setImmediate(r));
+  assert.equal(briefings().length, 0, 'ordinary activation during boot does not open briefing');
+  if (scenario === 'startup') {
+    main.hide();
+    app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
+    app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
+    await new Promise(r => setImmediate(r));
+    assert.equal(main.visible, false, 'startup does not restore hidden console');
+    assert.equal(briefings().length, 0, 'repeated startup waits for boot completion');
+  }
+  ipcMain.emit('waypoint:boot-complete', event);
+  ipcMain.emit('waypoint:boot-complete', event);
+  briefing = briefings()[0];
+  if (scenario === 'startup') {
+    assert(briefing, 'Windows startup opens briefing only after boot');
+  } else {
+    assert(!briefing, 'manual launch and disabled startup do not queue briefing');
+    app.emit('second-instance', {}, ['waypoint']);
+    await new Promise(r => setImmediate(r));
+    assert.equal(briefings().length, 0, 'ordinary activation after boot does not open briefing');
+    main.hide();
+    app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
+    await new Promise(r => setImmediate(r));
+    assert.equal(main.visible, false, 'startup activation preserves hidden console');
+    briefing = briefings()[0];
+    if (scenario === 'manual') assert(briefing, 'startup argument after boot opens briefing');
+    else assert(!briefing, 'disabled preference rejects automatic startup request');
+  }
+  if (briefing) {
     const bounds = briefing.getBounds();
     const center = main.getBounds().x + main.getBounds().width / 2;
     assert(bounds.x >= 0 && bounds.x + bounds.width <= 1920 && bounds.y >= 0 && bounds.y + bounds.height <= 1080);
     assert(bounds.x + bounds.width <= center - 250 || bounds.x >= center + 250, 'briefing does not cover the login panel');
     assert.equal(briefing.visible, false, 'briefing stays hidden until ready-to-show');
+    app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
+    app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
+    await new Promise(r => setImmediate(r));
     globalThis.__waypointDebug.createBriefingWindow();
     assert.equal(briefing.showCount, 0, 'duplicate request must not show before ready');
     assert.equal(briefing.focusCount, 0, 'duplicate request must not focus before ready');
-    assert.equal(windows.filter(w => w.options.title.includes('Daily Briefing')).length, 1);
+    assert.equal(briefings().length, 1, 'repeated startup never duplicates briefing');
     briefing.emit('ready-to-show');
     assert.equal(briefing.visible, true);
     assert((await invoke('briefing:snapshot', briefing)).includes('TEST'));
     await invoke('open-main', briefing);
-    main = windows.find(w => w.options.title.includes('Personal Operations'));
-    assert(main, 'briefing opens the main window');
     await assert.rejects(invoke('storage:read', main, key), /authentication required/);
     await assert.rejects(invoke('storage:read', briefing, key), /Authorization denied/);
   }
@@ -88,6 +116,9 @@ try {
     assert.equal(windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing')).length, 1);
   }
   briefing.destroy();
+  app.emit('second-instance', {}, ['waypoint']);
+  await new Promise(r => setImmediate(r));
+  assert.equal(briefings().length, 0, 'ordinary activation does not reopen a dismissed briefing');
   await invoke('briefing:open', main);
   const replacement = windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing'));
   assert.equal(replacement.length, 1, 'briefing can reopen after close');

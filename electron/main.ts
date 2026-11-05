@@ -190,9 +190,8 @@ function createMainWindow(show: boolean): BrowserWindow {
   });
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   win.webContents.on("will-redirect", (event) => event.preventDefault());
-  win.webContents.on("render-process-gone", () => { session.invalidate(); rendererReady = false; finishBootFallback(); });
-  win.webContents.on("did-fail-load", (_event, code, _description, _url, isMainFrame) => {
-    if (isMainFrame && code !== -3) finishBootFallback();
+  win.webContents.on("render-process-gone", () => {
+    session.invalidate(); rendererReady = false; consoleBootComplete = false;
   });
 
   if (show) {
@@ -215,7 +214,6 @@ function createMainWindow(show: boolean): BrowserWindow {
     mainWindow = null;
     rendererReady = false;
     consoleBootComplete = false;
-    finishBootFallback();
   });
 
   if (DEV_SERVER_URL) void win.loadURL(DEV_SERVER_URL);
@@ -236,13 +234,6 @@ function showMainWindow(): void {
 }
 
 /* ---------------------------------------------------------- briefing --- */
-function finishBootFallback(): void {
-  // A crashed/destroyed console must not permanently suppress the briefing.
-  if (pendingAutomaticBriefing && !isQuitting) {
-    pendingAutomaticBriefing = false;
-    createBriefingWindow();
-  }
-}
 function requestAutomaticBriefing(): void {
   if (!readBriefingPreference() || (briefingWindow && !briefingWindow.isDestroyed())) return;
   if (consoleBootComplete) createBriefingWindow();
@@ -531,8 +522,14 @@ if (!gotLock) {
     }
     // second-instance can arrive while the first instance is still starting.
     void app.whenReady().then(() => {
-      if (!argv.includes(STARTUP_ARG)) showMainWindow();
-      else if (readBriefingPreference() && (!mainWindow || mainWindow.isDestroyed())) showMainWindow();
+      if (!argv.includes(STARTUP_ARG)) {
+        showMainWindow();
+        return;
+      }
+      if (!readBriefingPreference()) return;
+      // A startup activation must never restore a console hidden in the tray.
+      // If no console exists, boot a hidden renderer to complete the handshake.
+      if (!mainWindow || mainWindow.isDestroyed()) createMainWindow(false);
       requestAutomaticBriefing();
     });
   });
@@ -555,10 +552,16 @@ if (!gotLock) {
       `[waypoint] main ready — startupLaunch=${isStartupLaunch} tray=${tray !== null} briefingAtLogin=${briefingPref}`,
     );
 
-    // Startup with briefing disabled remains tray-dormant. Otherwise the
-    // console boots first; the briefing waits for its completion handshake.
-    if (briefingPref) pendingAutomaticBriefing = true;
-    if (!isStartupLaunch || briefingPref) createMainWindow(true);
+    // Only an actual Windows startup requests the automatic briefing.
+    // Manual launch opens the console without queuing a briefing.
+    if (isStartupLaunch) {
+      if (briefingPref) {
+        pendingAutomaticBriefing = true;
+        createMainWindow(true);
+      }
+    } else {
+      createMainWindow(true);
+    }
 
     // Background reminder engine — runs regardless of window visibility.
     startScheduler({
