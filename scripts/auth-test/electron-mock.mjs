@@ -7,6 +7,7 @@ export const app = new EventEmitter();
 Object.assign(app, {
   requestSingleInstanceLock: () => true, whenReady: async () => {},
   getPath: () => process.env.WAYPOINT_TEST_DIR,
+  setAppUserModelId: (id) => { app.appUserModelId = id; },
   setAsDefaultProtocolClient: () => {}, quit: () => {},
   getLoginItemSettings: () => ({openAtLogin: false}), setLoginItemSettings: () => {},
 });

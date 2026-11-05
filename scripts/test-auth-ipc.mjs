@@ -13,8 +13,11 @@ const payload = { version: 4, state: { tasks: [{id:'task1', title:'PRIVATE TASK'
 const original = JSON.stringify({ [dbkey]: JSON.stringify(payload) });
 try {
   await writeFile(path.join(dir, 'waypoint-store.json'), original);
+  // Exercise the Windows-only initialization branch on non-Windows test hosts.
+  if (process.argv.includes('--simulate-windows')) Object.defineProperty(process, 'platform', { value: 'win32' });
   await import('../dist-electron/main.js');
   await new Promise(r => setImmediate(r));
+  if (process.platform === 'win32') assert.equal(app.appUserModelId, 'com.waypoint.console', 'Windows app identity should be registered');
   const main = windows[0];
   const event = (w, frame = w.webContents.mainFrame) => ({sender:w.webContents, senderFrame:frame});
   const invoke = (name, sender, ...args) => Promise.resolve().then(() => handlers.get(`waypoint:${name}`)(sender, ...args));

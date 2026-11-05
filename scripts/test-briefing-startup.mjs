@@ -17,8 +17,11 @@ const data = {version:4, state:{tasks:[], events:[], categories:[], settings:{br
 const invoke = (name, win, ...args) => Promise.resolve().then(() => handlers.get(`waypoint:${name}`)({sender:win.webContents,senderFrame:win.webContents.mainFrame}, ...args));
 try {
   await writeFile(path.join(dir, 'waypoint-store.json'), JSON.stringify({[key]:JSON.stringify(data)}));
+  // Exercise the Windows-only initialization branch on non-Windows test hosts.
+  if (process.argv.includes('--simulate-windows')) Object.defineProperty(process, 'platform', { value: 'win32' });
   await import('../dist-electron/main.js');
   await new Promise(r => setImmediate(r));
+  if (process.platform === 'win32') assert.equal(app.appUserModelId, 'com.waypoint.console', 'Windows app identity should be registered');
   let briefing = windows.find(w => w.options.title.includes('Daily Briefing'));
   let main = windows.find(w => w.options.title.includes('Personal Operations'));
   if (scenario === 'disabled') {
