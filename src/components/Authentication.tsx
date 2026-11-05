@@ -4,9 +4,9 @@ import { ArrowUpRight, Eye, EyeOff } from "lucide-react";
 import { bridge } from "@/lib/storage";
 import "./authentication.css";
 
-export default function Authentication({ onAuthenticated }: { onAuthenticated: () => void }) {
+export default function Authentication({ onAuthenticated, operatorExists }: { onAuthenticated: () => void; operatorExists: boolean }) {
   const reduce = useReducedMotion();
-  const [setup, setSetup] = useState<boolean | null>(null);
+  const [setup, setSetup] = useState<boolean | null>(() => !operatorExists);
   const [operator, setOperator] = useState("");
   const [key, setKey] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -18,9 +18,6 @@ export default function Authentication({ onAuthenticated }: { onAuthenticated: (
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    bridge()!.auth.status().then((exists) => setSetup(!exists)).catch(() => setError("LOCAL OPERATOR RECORD UNAVAILABLE"));
-  }, []);
   const fail = (message: string) => { setError(message); setAttempt((n) => n + 1); };
   async function submit(event: FormEvent) {
     event.preventDefault();
