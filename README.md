@@ -532,3 +532,55 @@ Semantic (flip in dark): `paper #F2F2EE→#111111` · `ink #191919→#F2F2EE` ·
 
 Constant (both themes): `acid #FFFA00` · `mint #00FFA2` · `ember #FF7A00` ·
 `chrome #191919` · `fog #F2F2EE` · `acidink #191919`
+
+### Local operator authentication
+
+The desktop console asks for a single operator on first launch. The access key
+must be 12–128 characters; spaces are allowed. Subsequent launches require the
+same credentials. The verifier is stored separately in the Electron user-data
+directory (`waypoint-auth.json`), using a random salt and scrypt; the access key
+is never saved. Keep a safe record of the credentials: there is no in-app
+recovery or account management. The Daily Briefing remains accessible without
+authentication, including its displayed data, and the browser-only preview
+does not provide the desktop authentication service.
+
+This is a local application access gate, not encryption of the existing data
+store or a defense against someone with access to the OS account and files.
+Hiding the console to the tray does not end the current authenticated session;
+a full application quit ends it.
+
+
+#### Session and security architecture
+
+The Electron main process is the authentication authority, not React state.
+After setup or verification it binds an in-memory session to the main window's
+actual WebContents. Sensitive IPC requires that WebContents, its main frame,
+the trusted console URL, and an active session. Navigation/reload, renderer
+termination, window destruction, and process exit invalidate it. Closing to
+tray retains the session. Tray directives wait until the authenticated console
+is ready. Console persistence is not hydrated before authentication.
+
+The login screen can request only the local appearance preference and the auth
+operations. The separate Daily Briefing window can request a read-only,
+minimized snapshot needed for its display, open the console, or dismiss itself;
+it cannot call the privileged storage or reminder APIs. The snapshot is
+refreshed periodically and intentionally reveals the briefing's contents
+without login. Background reminders and OS notifications continue independently
+of the console session; notification content may therefore also be visible on
+the machine. Notification actions originating outside the renderer retain their
+existing OS integration, and console-bound actions are queued until login.
+
+New verifiers use asynchronous scrypt (N=131072, r=8, p=1, 64-byte output,
+256 MiB maxmem) and a random salt. Existing Stage 04A verifiers upgrade after a
+successful login. A local, persistent, bounded progressive delay slows repeated
+failures, and resets after success; it is not a permanent lockout. Neither the
+verifier nor this throttle protects against a person who can modify local files,
+use another process with the same OS account, or read the unencrypted operations
+store. Use Windows account security and disk encryption for that threat model.
+The web preview is not an authentication security boundary.
+
+Run `npm test` for the credential, throttle, briefing snapshot, mocked Electron
+IPC/session integration, reminder, and recurrence tests. The IPC suite executes
+real handlers against mocked Electron objects; it does **not** replace testing
+in a real Electron runtime or on Windows. Windows startup, tray, notifications,
+renderer reload, and briefing behavior should be validated on Windows separately.

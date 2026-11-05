@@ -22,6 +22,13 @@ const api = {
     app: "0.3.0",
   },
 
+  auth: {
+    appearance: (): Promise<"light" | "dark" | "system"> => ipcRenderer.invoke("waypoint:auth:appearance"),
+    status: (): Promise<boolean> => ipcRenderer.invoke("waypoint:auth:status"),
+    create: (operator: string, key: string): Promise<void> => ipcRenderer.invoke("waypoint:auth:create", operator, key),
+    verify: (operator: string, key: string): Promise<boolean> => ipcRenderer.invoke("waypoint:auth:verify", operator, key),
+  },
+
   /** Windows Action Center notification via the main process. */
   notify: (payload: NotifyPayload): Promise<boolean> =>
     ipcRenderer.invoke("waypoint:notify", payload),
@@ -38,6 +45,8 @@ const api = {
       ipcRenderer.invoke("waypoint:storage:write", key, value),
     remove: (key: string): Promise<void> => ipcRenderer.invoke("waypoint:storage:remove", key),
   },
+
+  briefingSnapshot: (): Promise<string | null> => ipcRenderer.invoke("waypoint:briefing:snapshot"),
 
   /** Capability report consumed by Settings › System Integration. */
   capabilities: (): Promise<{

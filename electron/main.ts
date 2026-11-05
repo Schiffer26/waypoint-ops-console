@@ -20,7 +20,10 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, Tray } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { operatorExists, createOperator, authenticate, LoginThrottle } from "./auth.js";
+import { ConsoleSession, type SenderContext, type WindowContext } from "./session.js";
+import { briefingSnapshot, appearance } from "./briefing-data.js";
 import { DB_KEY, STORE_FILE_NAME, parseBriefingPreference } from "./prefs.js";
 import {
   cancelEntryReminders,
@@ -59,6 +62,18 @@ let mainWindow: BrowserWindow | null = null;
 let briefingWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+const session = new ConsoleSession();
+const expectedMainUrl = DEV_SERVER_URL ? new URL(DEV_SERVER_URL).href : pathToFileURL(path.join(__dirname, "../dist/index.html")).href;
+const expectedBriefingUrl = (() => { const url = new URL(expectedMainUrl); url.searchParams.set("window", "briefing"); return url.href; })();
+const context = (win: BrowserWindow | null): WindowContext | null => win && !win.isDestroyed() ? {
+  webContents: win.webContents, mainFrame: win.webContents.mainFrame, url: win.webContents.getURL(),
+} : null;
+const requireMain = (event: SenderContext) => session.requireMain(event, context(mainWindow), expectedMainUrl);
+const requireAuth = (event: SenderContext) => session.requireAuthenticated(event, context(mainWindow), expectedMainUrl);
+const requireBriefing = (event: SenderContext) => {
+  const win = context(briefingWindow);
+  if (!win || event.sender !== win.webContents || event.senderFrame !== win.mainFrame || win.url !== expectedBriefingUrl) throw new Error("Authorization denied: untrusted briefing renderer");
+};
 
 /* --- renderer directive pipeline -------------------------------------- */
 type CreateKind = "task" | "event";
@@ -74,10 +89,11 @@ let pendingDirectives: Directive[] = [];
 let rendererReady = false;
 
 function flushDirectives(): void {
-  if (!mainWindow || mainWindow.isDestroyed() || !rendererReady) return;
+  if (!mainWindow || mainWindow.isDestroyed() || !rendererReady || !session.isActive(context(mainWindow))) return;
   const queue = pendingDirectives;
   pendingDirectives = [];
   for (const d of queue) {
+    if (d.channel === "waypoint:reminder-action" && (d.payload as ReminderAction).cmd === "complete-task") cancelEntryReminders((d.payload as ReminderAction).entryId);
     mainWindow.webContents.send(d.channel, d.payload);
     console.log(`[waypoint] directive dispatched → ${d.channel}`);
   }
@@ -158,6 +174,18 @@ function createMainWindow(show: boolean): BrowserWindow {
   });
 
   rendererReady = false;
+  session.invalidate();
+  win.webContents.on("did-start-navigation", (_event, _url, inPlace, isMainFrame) => {
+    if (isMainFrame) {
+      session.invalidate(); rendererReady = false;
+      // Same-document navigation retains React memory; reload the trusted entry
+      // so a hash/history navigation cannot leave the unlocked UI visible.
+      if (inPlace) setImmediate(() => { if (!win.isDestroyed()) void win.loadURL(expectedMainUrl); });
+    }
+  });
+  win.webContents.on("will-navigate", (event) => event.preventDefault());
+  win.webContents.on("will-redirect", (event) => event.preventDefault());
+  win.webContents.on("render-process-gone", () => { session.invalidate(); rendererReady = false; });
 
   if (show) {
     win.once("ready-to-show", () => {
@@ -175,6 +203,7 @@ function createMainWindow(show: boolean): BrowserWindow {
     }
   });
   win.on("closed", () => {
+    session.invalidate();
     mainWindow = null;
     rendererReady = false;
   });
@@ -230,6 +259,8 @@ function createBriefingWindow(): void {
     console.log("[waypoint] briefing window opened");
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", (event) => event.preventDefault());
+  win.webContents.on("will-redirect", (event) => event.preventDefault());
   win.on("closed", () => {
     briefingWindow = null;
   });
@@ -282,7 +313,6 @@ function handleProtocolUrl(rawUrl: string): void {
   }
   if (cmd === "complete") {
     // The renderer owns every DB write — never mutate the store from here.
-    cancelEntryReminders(entryId);
     dispatchToRenderer("waypoint:reminder-action", {
       cmd: "complete-task",
       kind: k,
@@ -332,7 +362,32 @@ function createTray(): void {
 
 /* ------------------------------------------------------------------ ipc */
 function registerIpc(): void {
-  ipcMain.handle("waypoint:notify", (_event, payload: { title: string; body: string }) => {
+  const authFile = () => path.join(app.getPath("userData"), "waypoint-auth.json");
+  const throttle = new LoginThrottle(path.join(app.getPath("userData"), "waypoint-auth-attempts.json"));
+  let setupPending = false;
+  ipcMain.handle("waypoint:auth:appearance", (event) => { requireMain(event); return appearance(readStoreFile()); });
+  ipcMain.handle("waypoint:auth:status", (event) => { requireMain(event); return operatorExists(authFile()); });
+  ipcMain.handle("waypoint:auth:create", async (event, operator: unknown, key: unknown) => {
+    requireMain(event);
+    if (setupPending) throw new Error("Operator setup unavailable");
+    setupPending = true;
+    try {
+      const generation = session.snapshot();
+      if (await operatorExists(authFile())) throw new Error("Operator setup unavailable");
+      await createOperator(authFile(), operator, key);
+      session.grant(event, context(mainWindow), expectedMainUrl, generation);
+    } finally { setupPending = false; }
+  });
+  ipcMain.handle("waypoint:auth:verify", async (event, operator: unknown, key: unknown) => {
+    requireMain(event);
+    const generation = session.snapshot();
+    const ok = await throttle.run(() => authenticate(authFile(), operator, key));
+    if (ok) session.grant(event, context(mainWindow), expectedMainUrl, generation);
+    return ok;
+  });
+  ipcMain.handle("waypoint:briefing:snapshot", (event) => { requireBriefing(event); return briefingSnapshot(readStoreFile()); });
+  ipcMain.handle("waypoint:notify", (event, payload: { title: string; body: string }) => {
+    requireAuth(event);
     if (!Notification.isSupported()) return false;
     new Notification({ title: payload.title, body: payload.body, silent: false }).show();
     return true;
@@ -340,35 +395,36 @@ function registerIpc(): void {
 
   const loginItem = { path: process.execPath, args: [STARTUP_ARG] };
 
-  ipcMain.handle("waypoint:autoLaunch:get", () => {
+  ipcMain.handle("waypoint:autoLaunch:get", (event) => {
+    requireAuth(event);
     if (!["win32", "darwin"].includes(process.platform)) return false;
     // Args must match registration for a truthful read on Windows.
     return app.getLoginItemSettings(loginItem).openAtLogin;
   });
 
-  ipcMain.handle("waypoint:autoLaunch:set", (_event, enabled: boolean) => {
+  ipcMain.handle("waypoint:autoLaunch:set", (event, enabled: boolean) => {
+    requireAuth(event);
     if (!["win32", "darwin"].includes(process.platform)) return false;
     app.setLoginItemSettings({ ...loginItem, openAtLogin: Boolean(enabled) });
     return app.getLoginItemSettings(loginItem).openAtLogin;
   });
 
-  ipcMain.handle("waypoint:open-main", () => showMainWindow());
-  ipcMain.handle("waypoint:briefing:dismiss", () => briefingWindow?.close());
-  ipcMain.handle("waypoint:briefing:open", () => createBriefingWindow());
+  ipcMain.handle("waypoint:open-main", (event) => { requireBriefing(event); showMainWindow(); });
+  ipcMain.handle("waypoint:briefing:dismiss", (event) => { requireBriefing(event); briefingWindow?.close(); });
+  ipcMain.handle("waypoint:briefing:open", (event) => { requireAuth(event); createBriefingWindow(); });
 
   /** Console renderer handshake: mounted → subscribed → flush tray queue. */
   ipcMain.on("waypoint:renderer-ready", (event) => {
-    if (mainWindow && event.sender === mainWindow.webContents) {
-      rendererReady = true;
-      flushDirectives();
-    }
+    try { requireAuth(event); rendererReady = true; flushDirectives(); } catch { /* unauthenticated renderer cannot flush directives */ }
   });
 
-  ipcMain.handle("waypoint:storage:read", (_event, key: string) => {
+  ipcMain.handle("waypoint:storage:read", (event, key: string) => {
+    requireAuth(event);
     const data = readStoreFile();
     return Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null;
   });
-  ipcMain.handle("waypoint:storage:write", (_event, key: string, value: string) => {
+  ipcMain.handle("waypoint:storage:write", (event, key: string, value: string) => {
+    requireAuth(event);
     const data = readStoreFile();
     data[key] = value;
     writeStoreFile(data);
@@ -376,13 +432,14 @@ function registerIpc(): void {
     // schedule immediately (ordering is guaranteed: write completes first).
     if (key === DB_KEY) requestRescan("renderer-write");
   });
-  ipcMain.handle("waypoint:storage:remove", (_event, key: string) => {
+  ipcMain.handle("waypoint:storage:remove", (event, key: string) => {
+    requireAuth(event);
     const data = readStoreFile();
     delete data[key];
     writeStoreFile(data);
   });
 
-  ipcMain.handle("waypoint:capabilities", () => ({
+  ipcMain.handle("waypoint:capabilities", (event) => { requireAuth(event); return ({
     notifications: Notification.isSupported(),
     autoLaunch: ["win32", "darwin"].includes(process.platform),
     tray: tray !== null,
@@ -390,25 +447,27 @@ function registerIpc(): void {
     storage: true,
     backgroundScheduler: true,
     toastActions: process.platform === "win32",
-  }));
+  }); });
 
   /* ----------------------------- reminder engine ----------------------- */
-  ipcMain.handle("waypoint:reminders:history", (_e, limit?: number) => getHistory(limit ?? 200));
-  ipcMain.handle("waypoint:reminders:clear-history", () => {
+  ipcMain.handle("waypoint:reminders:history", (event, limit?: number) => { requireAuth(event); return getHistory(limit ?? 200); });
+  ipcMain.handle("waypoint:reminders:clear-history", (event) => {
+    requireAuth(event);
     clearHistory();
     return true;
   });
-  ipcMain.handle("waypoint:reminders:snooze", (_e, id: string, minutes: number) =>
-    snoozeReminder(id, minutes),
+  ipcMain.handle("waypoint:reminders:snooze", (event, id: string, minutes: number) => { requireAuth(event); return snoozeReminder(id, minutes); },
   );
-  ipcMain.handle("waypoint:reminders:status", () => schedulerStatus());
-  ipcMain.handle("waypoint:reminders:rescan", () => {
+  ipcMain.handle("waypoint:reminders:status", (event) => { requireAuth(event); return schedulerStatus(); });
+  ipcMain.handle("waypoint:reminders:rescan", (event) => {
+    requireAuth(event);
     requestRescan("renderer-request");
     return true;
   });
-  ipcMain.handle("waypoint:reminders:test", () => testNotification());
-  ipcMain.handle("waypoint:reminders:test-sound", (_e, choice?: SoundChoice) => testSound(choice));
-  ipcMain.handle("waypoint:reminders:cancel-entry", (_e, entryId: string) => {
+  ipcMain.handle("waypoint:reminders:test", (event) => { requireAuth(event); return testNotification(); });
+  ipcMain.handle("waypoint:reminders:test-sound", (event, choice?: SoundChoice) => { requireAuth(event); return testSound(choice); });
+  ipcMain.handle("waypoint:reminders:cancel-entry", (event, entryId: string) => {
+    requireAuth(event);
     cancelEntryReminders(entryId);
     return true;
   });
@@ -465,12 +524,11 @@ if (!gotLock) {
     // Background reminder engine — runs regardless of window visibility.
     startScheduler({
       onDelivered: (p: DeliveredPayload) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow && !mainWindow.isDestroyed() && session.isActive(context(mainWindow))) {
           mainWindow.webContents.send("waypoint:reminder-delivered", p);
         }
       },
       onAction: (a: ReminderAction) => {
-        if (a.cmd === "complete-task") cancelEntryReminders(a.entryId);
         dispatchToRenderer("waypoint:reminder-action", a);
       },
     });
@@ -507,6 +565,7 @@ if (!gotLock) {
   app.on("before-quit", () => {
     // D — genuine quit: let the OS reap the process normally.
     isQuitting = true;
+    session.invalidate();
     stopScheduler();
     briefingWindow?.destroy();
     mainWindow?.destroy();

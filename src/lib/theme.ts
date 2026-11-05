@@ -39,10 +39,10 @@ export function useSystemDark(): boolean {
  * Applies the current theme to the document and returns the resolved value.
  * Mount once at the app root (main console and briefing window each mount it).
  */
-export function useThemeSync(): ResolvedTheme {
+export function useThemeSync(override?: ThemeMode): ResolvedTheme {
   const mode = useOpsStore((s) => s.settings.theme);
   const dark = useSystemDark();
-  const resolved = resolveTheme(mode, dark);
+  const resolved = resolveTheme(override ?? mode, dark);
   useEffect(() => {
     document.documentElement.dataset.theme = resolved;
   }, [resolved]);

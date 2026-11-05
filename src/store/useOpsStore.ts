@@ -175,6 +175,8 @@ export const useOpsStore = create<OpsStore>()(
       },
     }),
     {
+      // The console may not read private storage until the main process grants a session.
+      skipHydration: typeof window !== "undefined" && !!window.waypoint && new URLSearchParams(window.location.search).get("window") !== "briefing",
       name: STORE_KEY,
       version: 4,
       storage: createJSONStorage(() => resolveStorageBackend().backend),

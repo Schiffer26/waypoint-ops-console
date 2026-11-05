@@ -59,6 +59,12 @@ export interface ReminderActionMsg {
 }
 
 export interface WaypointBridge {
+  auth: {
+    appearance(): Promise<"light" | "dark" | "system">;
+    status(): Promise<boolean>;
+    create(operator: string, key: string): Promise<void>;
+    verify(operator: string, key: string): Promise<boolean>;
+  };
   platform: NodeJS.Platform | string;
   versions: { electron: string; chrome: string; app: string };
   /** Fire an OS-level notification (Windows Action Center). */
@@ -72,6 +78,7 @@ export interface WaypointBridge {
     write: (key: string, value: string) => Promise<void>;
     remove: (key: string) => Promise<void>;
   };
+  briefingSnapshot(): Promise<string | null>;
   /** Runtime capability report (drives the Settings › System Integration panel). */
   capabilities: () => Promise<{
     notifications: boolean;

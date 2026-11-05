@@ -40,6 +40,15 @@ let cached: { name: BackendName; backend: KVBackend } | null = null;
 export function resolveStorageBackend(): { name: BackendName; backend: KVBackend } {
   const b = bridge();
   if (b?.storage) {
+    const briefing = new URLSearchParams(window.location.search).get("window") === "briefing";
+    if (briefing) {
+      if (!cached) cached = { name: "ELECTRON-FILE", backend: {
+        getItem: () => b.briefingSnapshot(),
+        // Briefing is read-only, including during Zustand migrations.
+        setItem: () => {}, removeItem: () => {},
+      } };
+      return cached;
+    }
     if (!cached || cached.name !== "ELECTRON-FILE") {
       cached = {
         name: "ELECTRON-FILE",

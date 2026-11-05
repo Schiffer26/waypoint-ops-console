@@ -1,0 +1,10 @@
+export const cancelEntryReminders = () => {};
+export const clearHistory = () => {};
+export const getHistory = () => [];
+export const requestRescan = () => {};
+export const schedulerStatus = () => ({});
+export const snoozeReminder = () => true;
+export const startScheduler = () => {};
+export const stopScheduler = () => {};
+export const testNotification = () => true;
+export const testSound = () => true;

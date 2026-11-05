@@ -33,3 +33,5 @@ npm-debug.log*
 *.pfx
 *.key
 
+**/waypoint-auth-attempts.json
+**/waypoint-auth*.tmp

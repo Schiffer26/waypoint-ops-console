@@ -6,7 +6,7 @@
  * the editing surface. Dismiss closes only this window; the application
  * continues in the system tray.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Power, X } from "lucide-react";
 import { useOpsStore, sortByDateTime } from "@/store/useOpsStore";
@@ -34,6 +34,11 @@ import { cn } from "@/utils/cn";
 
 export default function Briefing() {
   useThemeSync();
+  useEffect(() => {
+    if (!isDesktop()) return;
+    const timer = window.setInterval(() => { void useOpsStore.persist.rehydrate(); }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
   const reduce = useReducedMotion() ?? false;
   const itemV = reduce ? instantChild : riseChild;
   const now = useNow(1000);

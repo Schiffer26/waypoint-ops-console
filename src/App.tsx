@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { BellRing, X } from "lucide-react";
-import type { Entry, PageKey } from "@/types";
+import type { Entry, PageKey, ThemeMode } from "@/types";
 import { normalizeReminder, offsetLabel } from "@/types";
 import { ShellContext, type ConfirmOpts, type ModalRequest } from "@/lib/shell";
 import { useHydrated, useOpsStore } from "@/store/useOpsStore";
@@ -31,6 +31,7 @@ import Events from "@/pages/Events";
 import Completed from "@/pages/Completed";
 import Settings from "@/pages/Settings";
 import Briefing from "@/pages/Briefing";
+import Authentication from "@/components/Authentication";
 
 /** The Daily Briefing window reuses this bundle with ?window=briefing */
 const IS_BRIEFING =
@@ -149,10 +150,20 @@ function HydrationScreen() {
 
 /* ------------------------------------------------------------------ app */
 export default function App() {
-  useThemeSync(); // briefing window resolves the same persisted preference
+  const [authenticated, setAuthenticated] = useState(false);
+  const reducedMotion = useReducedMotion();
+  const [lockedTheme, setLockedTheme] = useState<ThemeMode>("system");
+  useEffect(() => {
+    if (isDesktop() && !IS_BRIEFING) bridge()?.auth.appearance().then(setLockedTheme).catch(() => {});
+  }, []);
+  useThemeSync(isDesktop() && !IS_BRIEFING && !authenticated ? lockedTheme : undefined); // briefing window resolves the same persisted preference
   const hydrated = useHydrated();
+  if (IS_BRIEFING) return hydrated ? <Briefing /> : <HydrationScreen />;
+  // The browser-only preview has no local credential service; the desktop
+  // application is the authoritative authentication environment.
+  if (isDesktop() && !authenticated) return <Authentication onAuthenticated={() => { setAuthenticated(true); void useOpsStore.persist.rehydrate(); }} />;
   if (!hydrated) return <HydrationScreen />;
-  if (IS_BRIEFING) return <Briefing />;
+  if (isDesktop()) return <motion.div className="h-full" initial={{ opacity: reducedMotion ? 1 : 0 }} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? 0 : 0.3 }}><ConsoleApp /></motion.div>;
   return <ConsoleApp />;
 }
 
