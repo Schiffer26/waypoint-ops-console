@@ -1,0 +1,57 @@
+{
+  "name": "waypoint-ops-console",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:electron": "npm run assets && tsc -p electron/tsconfig.json",
+    "desktop:dev": "node scripts/dev-desktop.mjs",
+    "desktop:pack": "npm run build && npm run build:electron && electron-builder --win nsis",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:desktop": "xvfb-run -a node scripts/smoke-desktop.mjs",
+    "test:reminders": "node scripts/test-reminders.mjs",
+    "smoke:scheduler": "xvfb-run -a node scripts/smoke-scheduler.mjs",
+    "assets": "node scripts/make-icons.mjs && node scripts/make-sound.mjs",
+    "test": "npm run build:electron && node scripts/test-reminders.mjs && node scripts/test-recurrence.mjs",
+    "test:recurrence": "node scripts/test-recurrence.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "clsx": "2.1.1",
+    "framer-motion": "^14.9.0",
+    "lucide-react": "^1.66.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "tailwind-merge": "3.4.0",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@types/node": "22.19.17",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "concurrently": "^9.2.5",
+    "electron": "^41.7.1",
+    "electron-builder": "^26.18.0",
+    "playwright": "^1.64.1",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.3.2",
+    "vite-plugin-singlefile": "2.3.0",
+    "wait-on": "^9.5.1"
+  },
+  "productName": "WAYPOINT",
+  "description": "WAYPOINT — Personal Operations Console (Windows desktop productivity application)",
+  "author": "Waypoint Systems",
+  "main": "dist-electron/main.js",
+  "allowScripts": {
+    "electron@41.7.1": true,
+    "esbuild@0.27.7": true,
+    "electron-winstaller@5.4.0": true
+  }
+}

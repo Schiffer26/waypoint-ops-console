@@ -1,0 +1,35 @@
+node_modules
+dist
+dist-electron
+release
+*.local
+.DS_Store
+shots
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+.npmrc
+
+# Local application data
+**/waypoint-store.json
+**/waypoint-reminder-ledger.json
+**/waypoint-auth.json
+**/waypoint-credentials.json
+
+# Personal backups and archives
+*.zip
+*.backup
+*.bak
+
+# Logs and debugging
+*.log
+npm-debug.log*
+
+# Sensitive keys and certificates
+*.pem
+*.p12
+*.pfx
+*.key
+

@@ -1,0 +1,42 @@
+# WAYPOINT — packaging configuration (electron-builder)
+# Produces an NSIS installer for Windows 10/11 (code signing optional).
+appId: com.waypoint.console
+productName: WAYPOINT
+copyright: Copyright © Waypoint Systems
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/** # renderer bundle (single inlined index.html)
+  - dist-electron/** # main, preload, reminder engine
+  - assets/** # tray icon + notification sound
+  - package.json
+
+asar: true
+
+# Runtime assets are read from disk (nativeImage.createFromPath for the tray
+# icon, readFileSync for the notification WAV). Unpacking them keeps those
+# reads on the real filesystem instead of inside the asar archive.
+asarUnpack:
+  - assets/**
+
+win:
+  target:
+    - nsis
+  artifactName: WAYPOINT-Setup-${version}.${ext}
+  # 256px PNG — electron-builder generates the .ico for the exe/installer.
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  # REQUIRED for Windows toast notifications: the Action Center only shows
+  # toasts for apps with a Start Menu shortcut whose AppUserModelID matches
+  # the one set via app.setAppUserModelId() (com.waypoint.console).
+  createStartMenuShortcut: true
+  shortcutName: WAYPOINT
+  menuCategory: false
