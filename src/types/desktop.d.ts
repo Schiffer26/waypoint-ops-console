@@ -64,6 +64,7 @@ export interface WaypointBridge {
     status(): Promise<boolean>;
     create(operator: string, key: string): Promise<void>;
     verify(operator: string, key: string): Promise<boolean>;
+    verifySettings(key: string): Promise<boolean>;
   };
   platform: NodeJS.Platform | string;
   versions: { electron: string; chrome: string; app: string };

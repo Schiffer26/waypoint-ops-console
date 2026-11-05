@@ -31,6 +31,8 @@ import CalendarPage from "@/pages/CalendarPage";
 import Events from "@/pages/Events";
 import Completed from "@/pages/Completed";
 import Settings from "@/pages/Settings";
+import SettingsVerification from "@/components/SettingsVerification";
+import "@/components/settings-verification.css";
 import Briefing from "@/pages/Briefing";
 import DesktopAuthentication from "@/components/DesktopAuthentication";
 
@@ -172,7 +174,63 @@ function ConsoleApp() {
   const [modal, setModal] = useState<ModalRequest | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmOpts | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
-
+  const pageRef = useRef<PageKey>("dashboard");
+  const previousPage = useRef<PageKey>("dashboard");
+  const settingsGeneration = useRef(0);
+  const unlockedRef = useRef(false);
+  const [settingsUnlocked, setSettingsUnlocked] = useState(false);
+  const [settingsLockVersion, setSettingsLockVersion] = useState(0);
+  const lockSettings = useCallback(() => {
+    settingsGeneration.current++;
+    unlockedRef.current = false;
+    setSettingsUnlocked(false);
+    if (pageRef.current === "settings") setConfirmState(null);
+    setSettingsLockVersion(n => n + 1);
+  }, []);
+  const guardedConfirm = useCallback((opts: ConfirmOpts) => {
+    if (pageRef.current !== "settings") { setConfirmState(opts); return; }
+    if (!unlockedRef.current) return;
+    const generation = settingsGeneration.current;
+    setConfirmState({ ...opts, onConfirm: () => {
+      if (pageRef.current === "settings" && unlockedRef.current && settingsGeneration.current === generation) opts.onConfirm();
+    } });
+  }, []);
+  const navigate = useCallback((next: PageKey) => {
+    const current = pageRef.current;
+    if (next === "settings" || current === "settings") lockSettings();
+    if (next === "settings" && current !== "settings") previousPage.current = current;
+    pageRef.current = next;
+    setPage(next);
+  }, [lockSettings]);
+  const verifySettings = useCallback(async (verify: () => Promise<boolean>) => {
+    const generation = settingsGeneration.current;
+    const ok = await verify();
+    if (ok && generation === settingsGeneration.current && pageRef.current === "settings" &&
+        document.visibilityState === "visible" && document.hasFocus()) {
+      unlockedRef.current = true;
+      setSettingsUnlocked(true);
+    }
+  }, []);
+  useEffect(() => {
+    let timer: number | undefined;
+    const reset = () => {
+      window.clearTimeout(timer);
+      if (unlockedRef.current && pageRef.current === "settings") timer = window.setTimeout(lockSettings, 60_000);
+    };
+    const lock = () => { window.clearTimeout(timer); if (pageRef.current === "settings") lockSettings(); };
+    const onVisibility = () => { if (document.visibilityState !== "visible") lock(); };
+    const events = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart", "scroll"] as const;
+    for (const event of events) window.addEventListener(event, reset, { passive: true, capture: true });
+    window.addEventListener("blur", lock);
+    document.addEventListener("visibilitychange", onVisibility);
+    reset();
+    return () => {
+      window.clearTimeout(timer);
+      for (const event of events) window.removeEventListener(event, reset, true);
+      window.removeEventListener("blur", lock);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [settingsUnlocked, lockSettings]);
   const pushToast = useCallback((t: Toast) => {
     setToasts((prev) => [...prev.filter((x) => x.id !== t.id), t]);
     window.setTimeout(() => {
@@ -230,7 +288,7 @@ function ConsoleApp() {
       if (a.cmd === "complete-task") {
         const task = store.tasks.find((t) => t.id === a.entryId);
         if (task && !task.completed) store.toggleTask(task.id);
-        setPage("tasks");
+        navigate("tasks");
         return;
       }
       // open-entry
@@ -238,10 +296,10 @@ function ConsoleApp() {
         a.kind === "task"
           ? store.tasks.find((t) => t.id === a.entryId)
           : store.events.find((e) => e.id === a.entryId);
-      setPage(a.kind === "task" ? "tasks" : "events");
+      navigate(a.kind === "task" ? "tasks" : "events");
       if (entry) setModal({ mode: "edit", entry });
     });
-  }, []);
+  }, [navigate]);
 
   // Esc closes the topmost surface.
   useEffect(() => {
@@ -267,7 +325,7 @@ function ConsoleApp() {
       case "completed":
         return <Completed />;
       case "settings":
-        return <Settings />;
+        return settingsUnlocked ? <div className="settings-protected-content"><Settings /></div> : <SettingsVerification key={settingsLockVersion} onVerified={verifySettings} onBack={() => navigate(previousPage.current)} />;
     }
   };
 
@@ -275,10 +333,10 @@ function ConsoleApp() {
     <ShellContext.Provider
       value={{
         page,
-        navigate: setPage,
+        navigate,
         openCreate: (kind, presetDate) => setModal({ mode: "create", kind, presetDate }),
         openEdit: (entry: Entry) => setModal({ mode: "edit", entry }),
-        confirm: setConfirmState,
+        confirm: guardedConfirm,
       }}
     >
       {!bootDone && (
@@ -286,8 +344,8 @@ function ConsoleApp() {
       )}
 
       {revealed && (
-        <div className="h-full flex bg-paper">
-          <Sidebar page={page} onNavigate={setPage} />
+        <div className={cn("h-full flex bg-paper", (page !== "settings" || !settingsUnlocked) && "settings-lock-active")}>
+          <Sidebar page={page} onNavigate={navigate} />
 
           <div className="flex-1 min-w-0 flex flex-col grid-bg">
             <TopBar page={page} />
@@ -330,8 +388,8 @@ function ConsoleApp() {
         {modal && <EntryModal req={modal} onClose={() => setModal(null)} />}
       </AnimatePresence>
 
-      {/* confirm dialogs */}
-      <AnimatePresence>
+      {/* A Settings lock must not retain an exiting confirmation dialog. */}
+      <AnimatePresence key={settingsLockVersion}>
         {confirmState && (
           <ConfirmDialog opts={confirmState} onClose={() => setConfirmState(null)} />
         )}
@@ -377,7 +435,7 @@ function ConsoleApp() {
                 <div className="flex gap-2 mt-3">
                   <button
                     onClick={() => {
-                      setPage(t.page);
+                      navigate(t.page);
                       dismissToast(t.id);
                     }}
                     className="micro bg-acid text-acidink px-2.5 py-1.5 font-semibold hover:bg-paper transition-colors"

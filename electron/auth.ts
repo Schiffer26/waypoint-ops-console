@@ -49,6 +49,15 @@ export async function authenticate(file: string, operator: unknown, key: unknown
   return true;
 }
 
+/** Password-only check for an already-authenticated operator; never grants a session. */
+export async function authenticateKey(file: string, key: unknown): Promise<boolean> {
+  if (typeof key !== "string" || key.length < 12 || key.length > 128) return false;
+  const record = await load(file);
+  if (!record) return false;
+  const candidate = await derive(key, Buffer.from(record.salt, "hex"), record.version === 2);
+  return timingSafeEqual(candidate, Buffer.from(record.verifier, "hex"));
+}
+
 /** Persisted throttle. Serialize attempts so concurrent IPC cannot evade delays. */
 export class LoginThrottle {
   private queue: Promise<void> = Promise.resolve();

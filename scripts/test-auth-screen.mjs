@@ -21,6 +21,11 @@ try {
     await page.goto('http://127.0.0.1:5173/');
     await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).waitFor();
     await page.waitForFunction(t => document.documentElement.dataset.theme === t, theme);
+    const cardWordmark = page.locator('.auth-emblem-wordmark');
+    assert(await cardWordmark.isVisible());
+    assert.equal(await cardWordmark.evaluate(el => el.firstChild.textContent), 'WAYPOINT');
+    assert.equal(await cardWordmark.locator('small').textContent(), 'PERSONAL OPERATIONS CONSOLE');
+    assert(await cardWordmark.locator('small').isVisible());
     const wordmark = page.locator('.auth-brand > span');
     const subtitle = wordmark.locator('small');
     assert.equal(await wordmark.evaluate(el => el.firstChild.textContent), 'WAYPOINT');
@@ -28,7 +33,7 @@ try {
     assert(await wordmark.isVisible());
     assert(await subtitle.isVisible());
     // Verify readable foreground contrast against the actual themed header background.
-    for (const text of [wordmark, subtitle]) {
+    for (const text of [wordmark, subtitle, cardWordmark, cardWordmark.locator('small')]) {
       const contrast = await text.evaluate(el => {
         const rgb = value => value.match(/\d+/g).slice(0, 3).map(Number);
         const luminance = color => rgb(color).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);

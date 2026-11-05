@@ -27,6 +27,7 @@ const api = {
     status: (): Promise<boolean> => ipcRenderer.invoke("waypoint:auth:status"),
     create: (operator: string, key: string): Promise<void> => ipcRenderer.invoke("waypoint:auth:create", operator, key),
     verify: (operator: string, key: string): Promise<boolean> => ipcRenderer.invoke("waypoint:auth:verify", operator, key),
+    verifySettings: (key: string): Promise<boolean> => ipcRenderer.invoke("waypoint:auth:verify-settings", key),
   },
 
   /** Windows Action Center notification via the main process. */

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { operatorExists, createOperator, authenticate } from '../dist-electron/auth.js';
+import { operatorExists, createOperator, authenticate, authenticateKey } from '../dist-electron/auth.js';
 
 const dir = await mkdtemp(path.join(tmpdir(), 'waypoint-auth-'));
 const file = path.join(dir, 'auth.json');
@@ -15,6 +15,8 @@ try {
   assert(!stored.includes('operator') || !stored.includes('"operator"'));
   assert(!stored.includes('a strong passphrase with spaces'));
   assert.equal(await authenticate(file, 'operator', 'a strong passphrase with spaces'), true);
+  assert.equal(await authenticateKey(file, 'a strong passphrase with spaces'), true);
+  assert.equal(await authenticateKey(file, 'a wrong passphrase'), false);
   assert.equal(await authenticate(file, 'operator', 'a wrong passphrase'), false);
   assert.equal(await authenticate(file, 'another', 'a strong passphrase with spaces'), false);
   await assert.rejects(createOperator(file, 'another', 'another valid passphrase'));
@@ -66,6 +68,8 @@ try {
     const salt = randomBytes(16);
     const record = {version:1, operatorHash:createHash('sha256').update('legacy').digest('hex'), salt:salt.toString('hex'), verifier:scryptSync('legacy passphrase', salt, 64).toString('hex')};
     await writeFile(file3, JSON.stringify(record));
+    assert.equal(await authenticateKey(file3, 'legacy passphrase'), true);
+    assert.equal(await authenticateKey(file3, 'wrong passphrase'), false);
     assert.equal(await authenticate(file3, 'legacy', 'wrong passphrase'), false);
     assert.equal(JSON.parse(await readFile(file3, 'utf8')).version, 1);
     assert.equal(await authenticate(file3, 'legacy', 'legacy passphrase'), true);

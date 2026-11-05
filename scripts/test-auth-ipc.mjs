@@ -24,6 +24,7 @@ try {
   const denied = (p) => assert.rejects(p, /Authorization denied/);
   const me = event(main);
   assert.equal(await invoke('auth:status', me), false);
+  await denied(invoke('auth:verify-settings', me, 'a strong access key'));
   assert.equal(await invoke('auth:appearance', me), 'dark');
   // Tasks, events and settings share this one KV payload, including mutation.
   for (const op of ['read', 'write', 'remove']) await denied(invoke(`storage:${op}`, me, dbkey, '{}'));
@@ -38,17 +39,31 @@ try {
   for (const op of ['read','write','remove']) await denied(invoke(`storage:${op}`, be, dbkey, '{}'));
   await denied(invoke('reminders:history', be));
   await denied(invoke('auth:status', be));
+  await denied(invoke('auth:verify-settings', be, 'a strong access key'));
   await invoke('open-main', be);
   assert.equal(await readFile(path.join(dir, 'waypoint-store.json'), 'utf8'), original);
   await invoke('auth:create', me, 'operator', 'a strong access key');
   assert.equal(await invoke('storage:read', me, dbkey), JSON.stringify(payload));
+  await denied(invoke('auth:verify-settings', be, 'a strong access key'));
+  await denied(invoke('auth:verify-settings', event(main, {}), 'a strong access key'));
+  assert.equal(await invoke('auth:verify-settings', me, 'incorrect access key'), false);
+  const attempts = JSON.parse(await readFile(path.join(dir, 'waypoint-auth-attempts.json'), 'utf8'));
+  assert.equal(attempts.failures, 1, 'settings attempts share the persistent login throttle');
+  assert.equal(await invoke('auth:verify-settings', me, 'a strong access key'), true);
+  assert.equal(JSON.parse(await readFile(path.join(dir, 'waypoint-auth-attempts.json'), 'utf8')).failures, 0);
+  assert.equal(await invoke('storage:read', me, dbkey), JSON.stringify(payload), 'settings check does not disrupt main session');
   ipcMain.emit('waypoint:renderer-ready', me);
   assert.equal(main.webContents.sent[0][0], 'waypoint:open-create');
   await denied(invoke('storage:read', event(main, {}), dbkey));
   await denied(invoke('storage:read', be, dbkey));
   // Hide-to-tray does not invalidate the current session.
   main.close(); assert.equal(await invoke('storage:read', me, dbkey), JSON.stringify(payload));
+  // A settings check must not grant or refresh a session after navigation.
+  const pendingSettings = invoke('auth:verify-settings', me, 'a strong access key');
+  await new Promise(r => setTimeout(r, 30));
   main.webContents.navigate('http://localhost:5173/');
+  await denied(pendingSettings);
+  await denied(invoke('auth:verify-settings', me, 'a strong access key'));
   await denied(invoke('storage:read', me, dbkey));
   assert.equal(await invoke('auth:verify', me, 'operator', 'incorrect access key'), false);
   await denied(invoke('storage:read', me, dbkey));

@@ -21,7 +21,7 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, screen, T
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { operatorExists, createOperator, authenticate, LoginThrottle } from "./auth.js";
+import { operatorExists, createOperator, authenticate, authenticateKey, LoginThrottle } from "./auth.js";
 import { ConsoleSession, type SenderContext, type WindowContext } from "./session.js";
 import { briefingSnapshot, appearance } from "./briefing-data.js";
 import { briefingBounds } from "./briefing-position.js";
@@ -414,6 +414,16 @@ function registerIpc(): void {
     const generation = session.snapshot();
     const ok = await throttle.run(() => authenticate(authFile(), operator, key));
     if (ok) session.grant(event, context(mainWindow), expectedMainUrl, generation);
+    return ok;
+  });
+  ipcMain.handle("waypoint:auth:verify-settings", async (event, key: unknown) => {
+    requireAuth(event);
+    const generation = session.snapshot();
+    const ok = await throttle.run(() => authenticateKey(authFile(), key));
+    // A navigation, destruction, or replacement session during scrypt must not
+    // make this result usable in a different authentication generation.
+    requireAuth(event);
+    if (generation !== session.snapshot()) throw new Error("Authorization denied: session expired");
     return ok;
   });
   ipcMain.handle("waypoint:briefing:snapshot", (event) => { requireBriefing(event); return briefingSnapshot(readStoreFile()); });

@@ -1,0 +1,3 @@
+/* Page transitions may keep the outgoing page mounted briefly; hide protected
+   content immediately on navigation or lock rather than waiting for exit. */
+.settings-lock-active .settings-protected-content { display: none; }
