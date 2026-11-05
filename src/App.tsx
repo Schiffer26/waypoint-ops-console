@@ -1,3 +1,4 @@
+import emblem from "@/assets/waypoint-emblem.png";
 /**
  * WAYPOINT — Personal Operations Console
  * Renderer shell: boot sequence, sidebar + command strip layout, page
@@ -8,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { BellRing, X } from "lucide-react";
-import type { Entry, PageKey } from "@/types";
+import type { Entry, PageKey, ThemeMode } from "@/types";
 import { normalizeReminder, offsetLabel } from "@/types";
 import { ShellContext, type ConfirmOpts, type ModalRequest } from "@/lib/shell";
 import { useHydrated, useOpsStore } from "@/store/useOpsStore";
@@ -30,7 +31,10 @@ import CalendarPage from "@/pages/CalendarPage";
 import Events from "@/pages/Events";
 import Completed from "@/pages/Completed";
 import Settings from "@/pages/Settings";
+import SettingsVerification from "@/components/SettingsVerification";
+import "@/components/settings-verification.css";
 import Briefing from "@/pages/Briefing";
+import DesktopAuthentication from "@/components/DesktopAuthentication";
 
 /** The Daily Briefing window reuses this bundle with ?window=briefing */
 const IS_BRIEFING =
@@ -132,9 +136,7 @@ function HydrationScreen() {
   return (
     <div className="h-full grid place-items-center bg-chrome grid-bg-dark text-fog">
       <div className="flex flex-col items-center gap-5">
-        <div className="size-9 bg-acid chamfer grid place-items-center">
-          <span className="font-display font-black text-acidink text-base">W</span>
-        </div>
+        <img src={emblem} alt="" className="size-9 object-contain flex-none" />
         <div className="micro text-mint flex items-center gap-2">
           <StatusDot />
           MOUNTING LOCAL OPERATIONS STORE…
@@ -149,10 +151,17 @@ function HydrationScreen() {
 
 /* ------------------------------------------------------------------ app */
 export default function App() {
-  useThemeSync(); // briefing window resolves the same persisted preference
+  const [authenticated, setAuthenticated] = useState(false);
+  const reducedMotion = useReducedMotion();
+  const [lockedTheme, setLockedTheme] = useState<ThemeMode>("system");
+  useThemeSync(isDesktop() && !IS_BRIEFING && !authenticated ? lockedTheme : undefined); // briefing window resolves the same persisted preference
   const hydrated = useHydrated();
+  if (IS_BRIEFING) return hydrated ? <Briefing /> : <HydrationScreen />;
+  // The browser-only preview has no local credential service; the desktop
+  // application is the authoritative authentication environment.
+  if (isDesktop() && !authenticated) return <DesktopAuthentication onTheme={setLockedTheme} onAuthenticated={() => { setAuthenticated(true); void useOpsStore.persist.rehydrate(); }} />;
   if (!hydrated) return <HydrationScreen />;
-  if (IS_BRIEFING) return <Briefing />;
+  if (isDesktop()) return <motion.div className="h-full" initial={{ opacity: reducedMotion ? 1 : 0 }} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? 0 : 0.3 }}><ConsoleApp /></motion.div>;
   return <ConsoleApp />;
 }
 
@@ -165,7 +174,96 @@ function ConsoleApp() {
   const [modal, setModal] = useState<ModalRequest | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmOpts | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
-
+  const pageRef = useRef<PageKey>("dashboard");
+  const previousPage = useRef<PageKey>("dashboard");
+  const settingsGeneration = useRef(0);
+  const unlockedRef = useRef(false);
+  const settingsPicker = useRef<{ blurSeen: boolean } | null>(null);
+  const [settingsUnlocked, setSettingsUnlocked] = useState(false);
+  const [settingsLockVersion, setSettingsLockVersion] = useState(0);
+  const lockSettings = useCallback(() => {
+    settingsGeneration.current++;
+    settingsPicker.current = null;
+    unlockedRef.current = false;
+    setSettingsUnlocked(false);
+    if (pageRef.current === "settings") setConfirmState(null);
+    setSettingsLockVersion(n => n + 1);
+  }, []);
+  // This lease is available only while Settings is unlocked. It covers one
+  // native-dialog blur, not subsequent blurs, navigation, or hidden windows.
+  const beginSettingsFilePicker = useCallback((): (() => void) | null => {
+    if (pageRef.current !== "settings" || !unlockedRef.current || settingsPicker.current) return null;
+    const picker = { blurSeen: false };
+    settingsPicker.current = picker;
+    window.dispatchEvent(new Event("waypoint:settings-picker-state"));
+    // If a blocked picker never blurs or fires cancel/change, fail closed rather
+    // than leaving the exception active indefinitely.
+    const watchdog = window.setTimeout(() => {
+      if (settingsPicker.current === picker && !picker.blurSeen) finish();
+    }, 2000);
+    const finish = () => {
+      window.clearTimeout(watchdog);
+      if (settingsPicker.current !== picker) return;
+      settingsPicker.current = null;
+      window.dispatchEvent(new Event("waypoint:settings-picker-state"));
+    };
+    return finish;
+  }, []);
+  const captureSettingsAccess = useCallback(() => {
+    const generation = settingsGeneration.current;
+    return () => pageRef.current === "settings" && unlockedRef.current && settingsGeneration.current === generation;
+  }, []);
+  const guardedConfirm = useCallback((opts: ConfirmOpts) => {
+    if (pageRef.current !== "settings") { setConfirmState(opts); return; }
+    if (!unlockedRef.current) return;
+    const generation = settingsGeneration.current;
+    setConfirmState({ ...opts, onConfirm: () => {
+      if (pageRef.current === "settings" && unlockedRef.current && settingsGeneration.current === generation) opts.onConfirm();
+    } });
+  }, []);
+  const navigate = useCallback((next: PageKey) => {
+    const current = pageRef.current;
+    if (next === "settings" || current === "settings") lockSettings();
+    if (next === "settings" && current !== "settings") previousPage.current = current;
+    pageRef.current = next;
+    setPage(next);
+  }, [lockSettings]);
+  const verifySettings = useCallback(async (verify: () => Promise<boolean>) => {
+    const generation = settingsGeneration.current;
+    const ok = await verify();
+    if (ok && generation === settingsGeneration.current && pageRef.current === "settings" &&
+        document.visibilityState === "visible" && document.hasFocus()) {
+      unlockedRef.current = true;
+      setSettingsUnlocked(true);
+    }
+  }, []);
+  useEffect(() => {
+    let timer: number | undefined;
+    const reset = () => {
+      window.clearTimeout(timer);
+      if (unlockedRef.current && pageRef.current === "settings" && !settingsPicker.current) timer = window.setTimeout(lockSettings, 60_000);
+    };
+    const lock = () => { window.clearTimeout(timer); if (pageRef.current === "settings") lockSettings(); };
+    const onBlur = () => {
+      const picker = settingsPicker.current;
+      if (picker && !picker.blurSeen) { picker.blurSeen = true; return; }
+      lock();
+    };
+    const onVisibility = () => { if (document.visibilityState !== "visible") lock(); };
+    const events = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart", "scroll"] as const;
+    for (const event of events) window.addEventListener(event, reset, { passive: true, capture: true });
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("waypoint:settings-picker-state", reset);
+    document.addEventListener("visibilitychange", onVisibility);
+    reset();
+    return () => {
+      window.clearTimeout(timer);
+      for (const event of events) window.removeEventListener(event, reset, true);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("waypoint:settings-picker-state", reset);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [settingsUnlocked, lockSettings]);
   const pushToast = useCallback((t: Toast) => {
     setToasts((prev) => [...prev.filter((x) => x.id !== t.id), t]);
     window.setTimeout(() => {
@@ -223,7 +321,7 @@ function ConsoleApp() {
       if (a.cmd === "complete-task") {
         const task = store.tasks.find((t) => t.id === a.entryId);
         if (task && !task.completed) store.toggleTask(task.id);
-        setPage("tasks");
+        navigate("tasks");
         return;
       }
       // open-entry
@@ -231,10 +329,10 @@ function ConsoleApp() {
         a.kind === "task"
           ? store.tasks.find((t) => t.id === a.entryId)
           : store.events.find((e) => e.id === a.entryId);
-      setPage(a.kind === "task" ? "tasks" : "events");
+      navigate(a.kind === "task" ? "tasks" : "events");
       if (entry) setModal({ mode: "edit", entry });
     });
-  }, []);
+  }, [navigate]);
 
   // Esc closes the topmost surface.
   useEffect(() => {
@@ -260,7 +358,7 @@ function ConsoleApp() {
       case "completed":
         return <Completed />;
       case "settings":
-        return <Settings />;
+        return settingsUnlocked ? <div className="settings-protected-content"><Settings /></div> : <SettingsVerification key={settingsLockVersion} onVerified={verifySettings} onBack={() => navigate(previousPage.current)} />;
     }
   };
 
@@ -268,10 +366,12 @@ function ConsoleApp() {
     <ShellContext.Provider
       value={{
         page,
-        navigate: setPage,
+        navigate,
         openCreate: (kind, presetDate) => setModal({ mode: "create", kind, presetDate }),
         openEdit: (entry: Entry) => setModal({ mode: "edit", entry }),
-        confirm: setConfirmState,
+        confirm: guardedConfirm,
+        beginSettingsFilePicker,
+        captureSettingsAccess,
       }}
     >
       {!bootDone && (
@@ -279,8 +379,8 @@ function ConsoleApp() {
       )}
 
       {revealed && (
-        <div className="h-full flex bg-paper">
-          <Sidebar page={page} onNavigate={setPage} />
+        <div className={cn("h-full flex bg-paper", (page !== "settings" || !settingsUnlocked) && "settings-lock-active")}>
+          <Sidebar page={page} onNavigate={navigate} />
 
           <div className="flex-1 min-w-0 flex flex-col grid-bg">
             <TopBar page={page} />
@@ -323,8 +423,8 @@ function ConsoleApp() {
         {modal && <EntryModal req={modal} onClose={() => setModal(null)} />}
       </AnimatePresence>
 
-      {/* confirm dialogs */}
-      <AnimatePresence>
+      {/* A Settings lock must not retain an exiting confirmation dialog. */}
+      <AnimatePresence key={settingsLockVersion}>
         {confirmState && (
           <ConfirmDialog opts={confirmState} onClose={() => setConfirmState(null)} />
         )}
@@ -370,7 +470,7 @@ function ConsoleApp() {
                 <div className="flex gap-2 mt-3">
                   <button
                     onClick={() => {
-                      setPage(t.page);
+                      navigate(t.page);
                       dismissToast(t.id);
                     }}
                     className="micro bg-acid text-acidink px-2.5 py-1.5 font-semibold hover:bg-paper transition-colors"

@@ -59,6 +59,13 @@ export interface ReminderActionMsg {
 }
 
 export interface WaypointBridge {
+  auth: {
+    appearance(): Promise<"light" | "dark" | "system">;
+    status(): Promise<boolean>;
+    create(operator: string, key: string): Promise<void>;
+    verify(operator: string, key: string): Promise<boolean>;
+    verifySettings(key: string): Promise<boolean>;
+  };
   platform: NodeJS.Platform | string;
   versions: { electron: string; chrome: string; app: string };
   /** Fire an OS-level notification (Windows Action Center). */
@@ -72,6 +79,7 @@ export interface WaypointBridge {
     write: (key: string, value: string) => Promise<void>;
     remove: (key: string) => Promise<void>;
   };
+  briefingSnapshot(): Promise<string | null>;
   /** Runtime capability report (drives the Settings › System Integration panel). */
   capabilities: () => Promise<{
     notifications: boolean;
@@ -102,6 +110,7 @@ export interface WaypointBridge {
   briefingDismiss: () => Promise<void>;
   /** Open (or focus) the Daily Briefing window on demand. */
   openBriefing: () => Promise<void>;
+  bootComplete: () => void;
   /** Sent once after the console renderer subscribes to tray directives. */
   rendererReady: () => void;
   /** Main-process push: tray "Add Task / Add Event" requests. Returns an unsubscribe fn. */

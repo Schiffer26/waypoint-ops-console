@@ -23,6 +23,8 @@ export interface ShellApi {
   openCreate: (kind: EntryKind, presetDate?: string) => void;
   openEdit: (entry: Entry) => void;
   confirm: (opts: ConfirmOpts) => void;
+  beginSettingsFilePicker: () => (() => void) | null;
+  captureSettingsAccess: () => () => boolean;
 }
 
 export const ShellContext = createContext<ShellApi | null>(null);

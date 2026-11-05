@@ -69,6 +69,27 @@ export default function Settings() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [schedStatus, setSchedStatus] = useState<SchedulerStatus | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const finishPickerRef = useRef<(() => void) | null>(null);
+  const readerRef = useRef<FileReader | null>(null);
+
+  useEffect(() => {
+    const input = fileRef.current;
+    const finish = () => { finishPickerRef.current?.(); finishPickerRef.current = null; };
+    const cancel = () => { if (input) input.value = ""; finish(); };
+    // Chromium emits cancel for a dismissed picker. Focus is also a fallback
+    // for platforms where the native dialog returns without a cancel event.
+    input?.addEventListener("cancel", cancel);
+    window.addEventListener("focus", finish);
+    return () => {
+      input?.removeEventListener("cancel", cancel);
+      window.removeEventListener("focus", finish);
+      finish();
+      if (input) input.value = "";
+      const reader = readerRef.current;
+      readerRef.current = null;
+      if (reader?.readyState === FileReader.LOADING) reader.abort();
+    };
+  }, []);
 
   const flash = (msg: string) => {
     setSysmsg(msg);
@@ -149,8 +170,23 @@ export default function Settings() {
   };
 
   const importData = (file: File) => {
+    const accessCurrent = shell.captureSettingsAccess();
+    const previous = readerRef.current;
+    readerRef.current = null;
+    if (previous?.readyState === FileReader.LOADING) previous.abort();
     const reader = new FileReader();
+    readerRef.current = reader;
+    const readFailed = () => {
+      if (readerRef.current !== reader) return;
+      readerRef.current = null;
+      if (accessCurrent()) flash("IMPORT FAILED — FILE COULD NOT BE READ");
+    };
+    reader.onerror = readFailed;
+    reader.onabort = readFailed;
     reader.onload = () => {
+      if (readerRef.current !== reader) return;
+      readerRef.current = null;
+      if (!accessCurrent()) return;
       try {
         const data = JSON.parse(String(reader.result)) as Partial<OpsData>;
         if (!Array.isArray(data.tasks) || !Array.isArray(data.events) || !Array.isArray(data.categories)) {
@@ -175,7 +211,8 @@ export default function Settings() {
         flash("IMPORT FAILED — INVALID WAYPOINT ARCHIVE");
       }
     };
-    reader.readAsText(file);
+    try { reader.readAsText(file); }
+    catch { readFailed(); }
   };
 
   const desktopLive = isDesktop();
@@ -399,7 +436,15 @@ export default function Settings() {
             <Btn variant="dark" onClick={exportData}>
               <Download size={12} /> EXPORT JSON
             </Btn>
-            <Btn variant="ghost" onClick={() => fileRef.current?.click()}>
+            <Btn variant="ghost" onClick={() => {
+              const input = fileRef.current;
+              if (!input) return;
+              const finish = shell.beginSettingsFilePicker();
+              if (!finish) return;
+              finishPickerRef.current = finish;
+              try { input.click(); }
+              catch { finish(); finishPickerRef.current = null; input.value = ""; flash("IMPORT FAILED — FILE PICKER UNAVAILABLE"); }
+            }}>
               <Upload size={12} /> IMPORT JSON
             </Btn>
             <input
@@ -409,8 +454,10 @@ export default function Settings() {
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) importData(f);
                 e.target.value = "";
+                finishPickerRef.current?.();
+                finishPickerRef.current = null;
+                if (f) importData(f);
               }}
             />
             <Btn

@@ -1,3 +1,4 @@
+import emblem from "@/assets/waypoint-emblem.png";
 /**
  * Startup sequence: charcoal init screen with mono diagnostics, then the
  * signature acid wipe that hands off to the mounted application.
@@ -63,9 +64,7 @@ export default function BootFX({
         }}
       >
         <div className="flex items-center gap-4">
-          <div className="size-10 bg-acid chamfer grid place-items-center">
-            <span className="font-display font-black text-acidink text-lg">W</span>
-          </div>
+          <img src={emblem} alt="" className="size-10 object-contain flex-none" />
           <div>
             <div className="font-display font-bold text-fog tracking-[0.3em] text-lg">
               WAYPOINT

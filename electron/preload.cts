@@ -22,6 +22,14 @@ const api = {
     app: "0.3.0",
   },
 
+  auth: {
+    appearance: (): Promise<"light" | "dark" | "system"> => ipcRenderer.invoke("waypoint:auth:appearance"),
+    status: (): Promise<boolean> => ipcRenderer.invoke("waypoint:auth:status"),
+    create: (operator: string, key: string): Promise<void> => ipcRenderer.invoke("waypoint:auth:create", operator, key),
+    verify: (operator: string, key: string): Promise<boolean> => ipcRenderer.invoke("waypoint:auth:verify", operator, key),
+    verifySettings: (key: string): Promise<boolean> => ipcRenderer.invoke("waypoint:auth:verify-settings", key),
+  },
+
   /** Windows Action Center notification via the main process. */
   notify: (payload: NotifyPayload): Promise<boolean> =>
     ipcRenderer.invoke("waypoint:notify", payload),
@@ -39,6 +47,8 @@ const api = {
     remove: (key: string): Promise<void> => ipcRenderer.invoke("waypoint:storage:remove", key),
   },
 
+  briefingSnapshot: (): Promise<string | null> => ipcRenderer.invoke("waypoint:briefing:snapshot"),
+
   /** Capability report consumed by Settings › System Integration. */
   capabilities: (): Promise<{
     notifications: boolean;
@@ -52,6 +62,9 @@ const api = {
   openMain: (): Promise<void> => ipcRenderer.invoke("waypoint:open-main"),
   briefingDismiss: (): Promise<void> => ipcRenderer.invoke("waypoint:briefing:dismiss"),
   openBriefing: (): Promise<void> => ipcRenderer.invoke("waypoint:briefing:open"),
+
+  /** Presentation completion only; does not grant a session. */
+  bootComplete: (): void => ipcRenderer.send("waypoint:boot-complete"),
 
   /**
    * Readiness handshake: the console renderer sends this once it has
