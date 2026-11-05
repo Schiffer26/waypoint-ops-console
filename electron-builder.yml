@@ -26,10 +26,12 @@ win:
   target:
     - nsis
   artifactName: WAYPOINT-Setup-${version}.${ext}
-  # 256px PNG — electron-builder generates the .ico for the exe/installer.
-  icon: build/icon.png
+  # Multi-resolution ICO generated from the official emblem master.
+  icon: build/icon.ico
 
 nsis:
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

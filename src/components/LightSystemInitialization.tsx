@@ -1,4 +1,4 @@
-import logo from "@/assets/waypoint-operations-console-logo.png";
+import logo from "@/assets/waypoint-emblem.png";
 import "./light-system-initialization.css";
 
 /** Independent light-mode sequence; state labels report actual initialization. */

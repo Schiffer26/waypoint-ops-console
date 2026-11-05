@@ -39,7 +39,7 @@ try {
     assert.equal(await page.locator('.system-init').count(),0);
     await page.locator('.light-boot-art img').evaluate(img => img.decode());
     const src = await page.locator('.light-boot-art img').getAttribute('src');
-    assert(src.includes('waypoint-operations-console-logo.png'));
+    assert(src.includes('waypoint-emblem.png'));
     assert.equal(await page.evaluate(() => window.startupTest.getStorageCalls()),0);
     await page.waitForTimeout(2800);
     assert(await page.getByRole('main',{name:'WAYPOINT system initialization'}).isVisible());

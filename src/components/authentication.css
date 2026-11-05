@@ -4,14 +4,15 @@
 .auth-header { border-bottom: 1px solid var(--color-line); }
 .auth-brand { display: flex; align-items: center; gap: 12px; color: var(--color-ink); font: 700 18px var(--font-display); letter-spacing: -.03em; }
 .auth-brand small { display: block; margin-top: 2px; color: var(--color-mute); font: 500 8px var(--font-mono); letter-spacing: .1em; }
-.auth-mark { display: grid; place-items: center; width: 34px; height: 34px; background: var(--color-acid); color: #191919; font-weight: 800; clip-path: polygon(0 0, 78% 0, 100% 22%, 100% 100%, 0 100%); }
+.auth-mark { display: block; width: 34px; height: 34px; object-fit: contain; flex: none; }
 .auth-main { flex: 1; display: grid; place-items: center; padding: 30px 20px; }
 .auth-panel { width: min(100%, 480px); background: var(--color-surface); border: 1px solid var(--color-line); padding: 0 36px; box-shadow: 0 18px 60px #0000000b; }
 .auth-panel-top, .auth-panel-bottom { display: flex; justify-content: space-between; padding: 16px 0; font: 500 9px var(--font-mono); letter-spacing: .13em; color: var(--color-mute); }
 .auth-panel-top { border-bottom: 1px solid var(--color-line); }
 .auth-panel-bottom { border-top: 1px solid var(--color-line); margin-top: 26px; }
 .auth-emblem { margin: 28px 0 23px; display: flex; align-items: center; gap: 10px; }
-.auth-emblem span { display: grid; place-items: center; width: 54px; height: 54px; background: var(--color-chrome); color: var(--color-acid); font: 700 28px var(--font-display); clip-path: polygon(0 0, 76% 0, 100% 24%, 100% 100%, 0 100%); }
+.auth-emblem span { display: block; width: 54px; height: 54px; }
+.auth-emblem span img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .auth-emblem i { height: 2px; width: 42px; background: var(--color-acid); }
 .auth-kicker { font: 600 9px var(--font-mono); letter-spacing: .13em; color: var(--color-mute); display: flex; align-items: center; gap: 8px; }
 .auth-dot { display: inline-block; width: 7px; height: 7px; background: var(--color-mint); border-radius: 50%; box-shadow: 0 0 8px #00ffa280; }

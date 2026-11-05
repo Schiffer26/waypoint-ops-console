@@ -1,3 +1,4 @@
+import emblem from "@/assets/waypoint-emblem.png";
 /**
  * WAYPOINT — Personal Operations Console
  * Renderer shell: boot sequence, sidebar + command strip layout, page
@@ -133,9 +134,7 @@ function HydrationScreen() {
   return (
     <div className="h-full grid place-items-center bg-chrome grid-bg-dark text-fog">
       <div className="flex flex-col items-center gap-5">
-        <div className="size-9 bg-acid chamfer grid place-items-center">
-          <span className="font-display font-black text-acidink text-base">W</span>
-        </div>
+        <img src={emblem} alt="" className="size-9 object-contain flex-none" />
         <div className="micro text-mint flex items-center gap-2">
           <StatusDot />
           MOUNTING LOCAL OPERATIONS STORE…

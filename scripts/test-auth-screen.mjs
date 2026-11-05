@@ -21,6 +21,11 @@ try {
     await page.goto('http://127.0.0.1:5173/');
     await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).waitFor();
     await page.waitForFunction(t => document.documentElement.dataset.theme === t, theme);
+    for (const selector of ['.auth-mark', '.auth-emblem img']) {
+      const image = page.locator(selector);
+      assert((await image.getAttribute('src')).includes('waypoint-emblem.png'));
+      assert(await image.evaluate(async img => { await img.decode(); return img.naturalWidth === 1095 && img.naturalHeight === 1073 && getComputedStyle(img).objectFit === 'contain'; }));
+    }
     await page.evaluate(() => { window.phaseHistory = []; const el = document.querySelector('.auth-phase'); new MutationObserver(() => window.phaseHistory.push(el.textContent)).observe(el, {subtree:true,childList:true,characterData:true}); });
     await page.locator('#auth-operator').fill('operator');
     await page.locator('#auth-key').fill('incorrect access key');
@@ -50,6 +55,10 @@ try {
     }
     await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).waitFor({state:'detached',timeout:10000});
     assert.equal(await page.evaluate(() => window.authTestCalls()), 2);
+    const sidebarEmblem = page.locator('aside img');
+    await sidebarEmblem.waitFor();
+    assert((await sidebarEmblem.getAttribute('src')).includes('waypoint-emblem.png'));
+    assert(await sidebarEmblem.evaluate(async img => { await img.decode(); return getComputedStyle(img).objectFit === 'contain'; }));
     console.log(`Authentication screen UI passed: ${theme}, ${reducedMotion} (mock bridge)`);
     await ctx.close();
   }

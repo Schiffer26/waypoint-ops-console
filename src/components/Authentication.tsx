@@ -1,3 +1,4 @@
+import emblem from "@/assets/waypoint-emblem.png";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, Eye, EyeOff } from "lucide-react";
@@ -58,11 +59,11 @@ export default function Authentication({ onAuthenticated, operatorExists }: { on
     <div className="auth-screen grid-bg" data-auth-phase={phase === "ACCESS GRANTED" ? "granted" : undefined}>
       <div className="auth-ambient" aria-hidden="true"><div className="auth-ambient-grid" /><div className="auth-ambient-scan" /><div className="auth-ambient-geometry auth-ambient-geometry-a" /><div className="auth-ambient-geometry auth-ambient-geometry-b" /><div className="auth-ambient-cross auth-ambient-cross-a">+</div><div className="auth-ambient-cross auth-ambient-cross-b">+</div></div>
       {!reduce && <motion.div className="auth-wipe" initial={{ scaleX: 0 }} animate={{ scaleX: [0, 1, 0] }} transition={{ duration: 1, times: [0, .55, 1] }} />}
-      <header className="auth-header"><div className="auth-brand"><span className="auth-mark">W</span><span>WAYPOINT<small>PERSONAL OPERATIONS CONSOLE</small></span></div><span className="auth-header-code">SYS / 04A&nbsp;&nbsp; — &nbsp;&nbsp;LOCAL ACCESS</span></header>
+      <header className="auth-header"><div className="auth-brand"><img className="auth-mark" src={emblem} alt="" /><span>WAYPOINT<small>PERSONAL OPERATIONS CONSOLE</small></span></div><span className="auth-header-code">SYS / 04A&nbsp;&nbsp; — &nbsp;&nbsp;LOCAL ACCESS</span></header>
       <main className="auth-main">
         <motion.div className="auth-panel" {...entrance(.1)}>
           <div className="auth-panel-top"><span>IDENTITY VERIFICATION</span><span>01 / 01</span></div>
-          <motion.div className="auth-emblem" {...entrance(.18)}><span>W</span><i /></motion.div>
+          <motion.div className="auth-emblem" {...entrance(.18)}><span><img src={emblem} alt="" /></span><i /></motion.div>
           <motion.div {...entrance(.24)}><div className="auth-kicker"><span className="auth-dot" /> LOCAL SYSTEM // {setup ? "INITIAL SETUP" : "SECURE ACCESS"}</div><h1>{setup ? "CREATE OPERATOR" : "OPERATOR AUTHENTICATION"}</h1><p className="auth-description">{setup ? "Initialize the authorized operator for this local console." : "Verify your operator credentials to access the operations console."}</p></motion.div>
           <motion.form onSubmit={submit} className="auth-form" {...entrance(.34)}>
             <label htmlFor="auth-operator">OPERATOR <span>01</span></label>

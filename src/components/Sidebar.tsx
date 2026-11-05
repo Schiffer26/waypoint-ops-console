@@ -1,3 +1,4 @@
+import emblem from "@/assets/waypoint-emblem.png";
 /**
  * Vertical operations navigation — charcoal identity rail with numbered
  * mono-labeled sections and live system status footer.
@@ -49,9 +50,7 @@ export default function Sidebar({
       {/* identity block */}
       <div className="px-4 lg:px-6 pt-6 pb-5 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="size-9 bg-acid chamfer grid place-items-center flex-none">
-            <span className="font-display font-black text-acidink text-base">W</span>
-          </div>
+          <img src={emblem} alt="" className="size-9 object-contain flex-none" />
           <div className="hidden lg:block min-w-0">
             <div className="font-display font-bold tracking-[0.28em] text-[15px] leading-none">
               WAYPOINT

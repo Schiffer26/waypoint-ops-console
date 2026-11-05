@@ -1,3 +1,4 @@
+import emblem from "@/assets/waypoint-emblem.png";
 /**
  * DAILY BRIEFING — compact startup window (?window=briefing).
  *
@@ -86,9 +87,7 @@ export default function Briefing() {
         variants={itemV}
         className="drag-region bg-chrome text-fog px-5 py-3.5 flex items-center gap-3 flex-none"
       >
-        <div className="size-7 bg-acid chamfer grid place-items-center flex-none">
-          <span className="font-display font-black text-acidink text-sm">W</span>
-        </div>
+        <img src={emblem} alt="" className="size-7 object-contain flex-none" />
         <div className="min-w-0 flex-1">
           <div className="font-display font-bold tracking-[0.26em] text-[12px] leading-none">
             WAYPOINT
