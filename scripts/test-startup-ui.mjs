@@ -103,12 +103,13 @@ try {
     const {context,page} = await open({exists:true,theme:'dark',reduced:true,narrow:true,failOnce:true});
     await page.goto('http://127.0.0.1:5173/');
     await page.getByRole('alert').getByText('LOCAL INITIALIZATION UNAVAILABLE').waitFor();
-    await page.waitForFunction(() => window.startupTest.bootSignals === 1);
+    assert.equal(await page.evaluate(() => window.startupTest.bootSignals),0, 'failed initialization cannot signal authentication readiness');
     assert.equal(await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).count(),0);
     assert.equal(await page.locator('.system-init-progress span').evaluate(el=>getComputedStyle(el).animationName),'none');
     await page.evaluate(() => window.startupTest.allowRetry());
     await page.getByRole('button',{name:'RETRY INITIALIZATION'}).click();
     await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).waitFor({timeout:1200});
+    await page.waitForFunction(() => window.startupTest.bootSignals === 1);
     assert((await page.evaluate(() => window.startupTest.getAttempts())) >= 2);
     assert.equal(await page.evaluate(() => document.documentElement.dataset.theme),'dark');
     await context.close();
@@ -121,6 +122,7 @@ try {
     await page.getByRole('alert').getByText('LOCAL INITIALIZATION UNAVAILABLE').waitFor({timeout:15000});
     assert.equal(await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).count(),0);
     assert(await page.getByRole('button',{name:'RETRY INITIALIZATION'}).isVisible());
+    assert.equal(await page.evaluate(() => window.startupTest.bootSignals),0);
     await context.close();
     console.log('Stalled initialization timeout passed (mock bridge)');
   }

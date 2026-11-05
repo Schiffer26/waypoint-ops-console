@@ -64,6 +64,8 @@ let briefingWindow: BrowserWindow | null = null;
 let briefingReady = false;
 let consoleBootComplete = false;
 let pendingAutomaticBriefing = false;
+// One automatic briefing per process; dismissal must survive later activations.
+let automaticBriefingHandled = false;
 let tray: Tray | null = null;
 let isQuitting = false;
 const session = new ConsoleSession();
@@ -235,12 +237,21 @@ function showMainWindow(): void {
 
 /* ---------------------------------------------------------- briefing --- */
 function requestAutomaticBriefing(): void {
-  if (!readBriefingPreference() || (briefingWindow && !briefingWindow.isDestroyed())) return;
-  if (consoleBootComplete) createBriefingWindow();
-  else pendingAutomaticBriefing = true;
+  if (automaticBriefingHandled || !readBriefingPreference()) return;
+  if (briefingWindow && !briefingWindow.isDestroyed()) {
+    automaticBriefingHandled = true;
+    return;
+  }
+  if (consoleBootComplete) {
+    automaticBriefingHandled = true;
+    createBriefingWindow();
+  } else {
+    pendingAutomaticBriefing = true;
+  }
 }
 function createBriefingWindow(): void {
   // A manual opening also satisfies any pending automatic request.
+  if (pendingAutomaticBriefing) automaticBriefingHandled = true;
   pendingAutomaticBriefing = false;
   if (briefingWindow && !briefingWindow.isDestroyed()) {
     // A second request during load must not show an unpainted window.
@@ -440,7 +451,10 @@ function registerIpc(): void {
       consoleBootComplete = true;
       if (pendingAutomaticBriefing) {
         pendingAutomaticBriefing = false;
-        if (readBriefingPreference()) createBriefingWindow();
+        if (readBriefingPreference() && !automaticBriefingHandled) {
+          automaticBriefingHandled = true;
+          createBriefingWindow();
+        }
       }
     } catch { /* Ignore unrelated or stale renderers. */ }
   });
@@ -526,7 +540,7 @@ if (!gotLock) {
         showMainWindow();
         return;
       }
-      if (!readBriefingPreference()) return;
+      if (!readBriefingPreference() || automaticBriefingHandled) return;
       // A startup activation must never restore a console hidden in the tray.
       // If no console exists, boot a hidden renderer to complete the handshake.
       if (!mainWindow || mainWindow.isDestroyed()) createMainWindow(false);
@@ -552,14 +566,11 @@ if (!gotLock) {
       `[waypoint] main ready — startupLaunch=${isStartupLaunch} tray=${tray !== null} briefingAtLogin=${briefingPref}`,
     );
 
-    // Only an actual Windows startup requests the automatic briefing.
-    // Manual launch opens the console without queuing a briefing.
-    if (isStartupLaunch) {
-      if (briefingPref) {
-        pendingAutomaticBriefing = true;
-        createMainWindow(true);
-      }
-    } else {
+    // Both fresh manual and Windows startup launches queue the briefing when
+    // enabled; neither opens it before the console's boot-ready handshake.
+    // Windows startup remains tray-dormant when the preference is disabled.
+    if (!isStartupLaunch || briefingPref) {
+      if (briefingPref) requestAutomaticBriefing();
       createMainWindow(true);
     }
 

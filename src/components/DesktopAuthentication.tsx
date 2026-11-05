@@ -62,12 +62,6 @@ export default function DesktopAuthentication({ onTheme, onAuthenticated }: {
   const signalBootComplete = () => {
     if (!signalled.current) { signalled.current = true; bridge()?.bootComplete(); }
   };
-  // A failed initialization remains fail-closed, but must not strand the briefing.
-  useEffect(() => {
-    if (error && introDone) signalBootComplete();
-  // The signal is intentionally once per renderer lifetime.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [error, introDone]);
   const dark = bootTheme === "dark" || (bootTheme === "system" && systemDark);
   return (
     <AnimatePresence mode="wait" initial={false}>

@@ -121,20 +121,20 @@ briefing) stay constant so contrast relationships never invert.
 
 ### Daily Briefing (Windows startup)
 
-Launching with `--waypoint-startup` shows a compact frameless popup instead of the console:
+After the console finishes booting, an enabled briefing opens as a compact frameless popup:
 
 - WAYPOINT identity + version, live clock, personalized greeting (saved operator name)
 - today/overdue/cleared counters, today's event schedule, next transmission + live countdown
 - operational status line (`ALL SYSTEMS NOMINAL` / `ATTENTION REQUIRED`)
-- **OPEN MAIN CONSOLE** → restores the dashboard · **DISMISS** → closes only the popup
+- **OPEN MAIN CONSOLE** → opens or restores the authentication screen or current console · **DISMISS** → closes only the popup
 
 Rules implemented in `electron/main.ts`:
 
 | Rule | Behaviour                                                                             |
 | ---- | ------------------------------------------------------------------------------------- |
 | A    | Login launch → console boots first; briefing opens when `settings.briefingAtLogin` is on      |
-| B    | Manual launch → full dashboard, no briefing                                            |
-| C    | Briefing dismiss / console close → window hides; app keeps running via the tray        |
+| B    | Manual launch → console boots first; briefing opens when `settings.briefingAtLogin` is on |
+| C    | Briefing dismiss closes the popup; console close hides it to the tray                    |
 | D    | Tray **Quit WAYPOINT** → `isQuitting` flag, normal process termination                 |
 
 Two independent persisted settings: **Launch at login** (OS login item, registered *and*
@@ -561,13 +561,13 @@ tray retains the session. Tray directives wait until the authenticated console
 is ready. Console persistence is not hydrated before authentication.
 
 The Daily Briefing opens automatically after console initialization and its
-boot animation on Windows startup when the existing `briefingAtLogin`
-preference is enabled. A normal manual launch opens only the console. Windows
-startup remains tray-dormant when that preference is disabled. Disabling
+boot animation on both fresh manual launches and Windows startup when the
+existing `briefingAtLogin` preference is enabled. Windows startup remains
+tray-dormant when that preference is disabled. Disabling
 that preference suppresses automatic opening; the Settings preview remains
 available. Automatic requests wait for the console boot-completion handshake;
-if the renderer crashes before it can send that signal, the request remains
-queued until a console renderer completes boot. The tray can still open a
+if initialization fails or the renderer crashes before it can send that
+signal, the request remains queued until a console renderer completes boot. The tray can still open a
 briefing manually.
 
 The login screen can request only the local appearance preference and the auth

@@ -1,12 +1,12 @@
 // Real main-process lifecycle/IPC handlers, using mocked Electron windows.
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { handlers, windows, app, ipcMain } from 'electron';
 
 const scenario = process.argv[2];
-if (!['manual', 'startup', 'disabled', 'startup-disabled'].includes(scenario)) throw new Error('Missing scenario');
+if (!['manual', 'first-run', 'startup', 'disabled', 'startup-disabled'].includes(scenario)) throw new Error('Missing scenario');
 if (scenario === 'startup' || scenario === 'startup-disabled') process.argv.push('--waypoint-startup');
 const dir = await mkdtemp(path.join(tmpdir(), 'waypoint-startup-'));
 process.env.WAYPOINT_TEST_DIR = dir;
@@ -16,7 +16,7 @@ const key = 'waypoint.db.v1';
 const data = {version:4, state:{tasks:[], events:[], categories:[], settings:{briefingAtLogin:!scenario.includes('disabled'),operatorName:'TEST',theme:'dark',hour24:true}}};
 const invoke = (name, win, ...args) => Promise.resolve().then(() => handlers.get(`waypoint:${name}`)({sender:win.webContents,senderFrame:win.webContents.mainFrame}, ...args));
 try {
-  await writeFile(path.join(dir, 'waypoint-store.json'), JSON.stringify({[key]:JSON.stringify(data)}));
+  if (scenario !== 'first-run') await writeFile(path.join(dir, 'waypoint-store.json'), JSON.stringify({[key]:JSON.stringify(data)}));
   // Exercise the Windows-only initialization branch on non-Windows test hosts.
   if (process.argv.includes('--simulate-windows')) Object.defineProperty(process, 'platform', { value: 'win32' });
   await import('../dist-electron/main.js');
@@ -43,7 +43,7 @@ try {
   app.emit('second-instance', {}, ['waypoint']);
   await new Promise(r => setImmediate(r));
   assert.equal(briefings().length, 0, 'ordinary activation during boot does not open briefing');
-  if (scenario === 'startup') {
+  if (!scenario.includes('disabled')) {
     main.hide();
     app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
     app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
@@ -54,10 +54,10 @@ try {
   ipcMain.emit('waypoint:boot-complete', event);
   ipcMain.emit('waypoint:boot-complete', event);
   briefing = briefings()[0];
-  if (scenario === 'startup') {
-    assert(briefing, 'Windows startup opens briefing only after boot');
+  if (!scenario.includes('disabled')) {
+    assert(briefing, 'enabled fresh launch opens briefing only after boot');
   } else {
-    assert(!briefing, 'manual launch and disabled startup do not queue briefing');
+    assert(!briefing, 'disabled launch does not queue briefing');
     app.emit('second-instance', {}, ['waypoint']);
     await new Promise(r => setImmediate(r));
     assert.equal(briefings().length, 0, 'ordinary activation after boot does not open briefing');
@@ -66,8 +66,7 @@ try {
     await new Promise(r => setImmediate(r));
     assert.equal(main.visible, false, 'startup activation preserves hidden console');
     briefing = briefings()[0];
-    if (scenario === 'manual') assert(briefing, 'startup argument after boot opens briefing');
-    else assert(!briefing, 'disabled preference rejects automatic startup request');
+    assert(!briefing, 'disabled preference rejects automatic startup request');
   }
   if (briefing) {
     const bounds = briefing.getBounds();
@@ -84,11 +83,15 @@ try {
     assert.equal(briefings().length, 1, 'repeated startup never duplicates briefing');
     briefing.emit('ready-to-show');
     assert.equal(briefing.visible, true);
-    assert((await invoke('briefing:snapshot', briefing)).includes('TEST'));
+    const snapshot = await invoke('briefing:snapshot', briefing);
+    if (scenario === 'first-run') assert.equal(snapshot, null, 'first-run remains without saved store');
+    else assert(snapshot.includes('TEST'));
     await invoke('open-main', briefing);
     await assert.rejects(invoke('storage:read', main, key), /authentication required/);
     await assert.rejects(invoke('storage:read', briefing, key), /Authorization denied/);
   }
+  if (scenario === 'first-run') await assert.rejects(readFile(path.join(dir, 'waypoint-store.json')), {code:'ENOENT'});
+  else assert.equal(await readFile(path.join(dir, 'waypoint-store.json'), 'utf8'), JSON.stringify({[key]:JSON.stringify(data)}), 'startup preserves saved preference and records');
   assert(main);
   await invoke('auth:create', main, 'operator', 'strong access key');
   const beforeShow = briefing?.showCount;
@@ -119,6 +122,11 @@ try {
   app.emit('second-instance', {}, ['waypoint']);
   await new Promise(r => setImmediate(r));
   assert.equal(briefings().length, 0, 'ordinary activation does not reopen a dismissed briefing');
+  main.hide();
+  app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
+  await new Promise(r => setImmediate(r));
+  assert.equal(main.visible, false, 'repeated startup keeps console in tray');
+  assert.equal(briefings().length, 0, 'repeated startup does not reopen a dismissed briefing');
   await invoke('briefing:open', main);
   const replacement = windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing'));
   assert.equal(replacement.length, 1, 'briefing can reopen after close');
