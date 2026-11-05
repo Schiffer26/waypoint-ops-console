@@ -9,6 +9,8 @@ export function briefingSnapshot(kv: Record<string, string>, now = new Date()): 
   if (!state || typeof state !== "object") throw new Error("Invalid briefing data");
   const today = formatISO(now.getFullYear(), now.getMonth() + 1, now.getDate());
   const settings = state.settings ?? {};
+  // The briefing displays task counts only (today, cleared and overdue),
+  // not individual task titles. Keep just the fields used for those counts.
   const tasks: Row[] = (Array.isArray(state.tasks) ? state.tasks : [])
     .filter((t: Row) => t.date === today || (t.date < today && !t.completed))
     .map((t: Row, i: number) => ({ id: `brief-task-${i}`, date: t.date, dueTime: t.dueTime, completed: !!t.completed }));
@@ -27,9 +29,12 @@ export function briefingSnapshot(kv: Record<string, string>, now = new Date()): 
   });
   const shown = [...todayEvents];
   if (next && next.date !== today) shown.push(next);
+  // All today's titles are needed: the countdown can advance to a later
+  // occurrence between snapshot refreshes, even beyond the first three rows.
+  // The only future occurrence included is the next one shown in the briefing.
   const events = shown.map((e, i) => ({
     id: `brief-event-${i}`, date: e.date, startTime: e.startTime, endTime: e.endTime, repeat: "none",
-    title: i < 3 || e === next ? e.title : "", categoryId: i < 3 ? e.categoryId : "",
+    title: e.title, categoryId: i < 3 && e.date === today ? e.categoryId : "",
   }));
   const ids = new Set(events.slice(0, 3).map((e) => e.categoryId));
   const categories = (Array.isArray(state.categories) ? state.categories : []).filter((c: Row) => ids.has(c.id))
