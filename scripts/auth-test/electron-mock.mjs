@@ -18,12 +18,12 @@ class Contents extends EventEmitter {
   navigate(url) { this.emit('did-start-navigation', {}, url, false, true); this.url = url; }
 }
 export class BrowserWindow extends EventEmitter {
-  webContents = new Contents(); destroyed = false;
+  webContents = new Contents(); destroyed = false; visible = false; showCount = 0;
   constructor(options) { super(); this.options = options; windows.push(this); }
   loadURL(url) { this.webContents.navigate(new URL(url).href); return Promise.resolve(); }
   loadFile() { throw new Error('test uses dev URL'); }
   isDestroyed() { return this.destroyed; } isMinimized() { return false; }
-  show() {} focus() {} hide() {} restore() {}
+  show() { this.visible = true; this.showCount++; } focus() {} hide() { this.visible = false; } restore() {}
   close() { const e = { preventDefault() { e.prevented = true; } }; this.emit('close', e); if (!e.prevented) this.destroy(); }
   destroy() { this.destroyed = true; this.emit('closed'); }
   static getAllWindows() { return windows.filter(w => !w.destroyed); }

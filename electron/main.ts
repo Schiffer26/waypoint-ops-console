@@ -60,6 +60,7 @@ if (process.defaultApp) {
 
 let mainWindow: BrowserWindow | null = null;
 let briefingWindow: BrowserWindow | null = null;
+let briefingReady = false;
 let tray: Tray | null = null;
 let isQuitting = false;
 const session = new ConsoleSession();
@@ -228,8 +229,8 @@ function showMainWindow(): void {
 /* ---------------------------------------------------------- briefing --- */
 function createBriefingWindow(): void {
   if (briefingWindow && !briefingWindow.isDestroyed()) {
-    briefingWindow.show();
-    briefingWindow.focus();
+    // A second request during load must not show an unpainted window.
+    if (briefingReady) { briefingWindow.show(); briefingWindow.focus(); }
     return;
   }
   const win = new BrowserWindow({
@@ -254,7 +255,11 @@ function createBriefingWindow(): void {
     },
   });
 
+  briefingWindow = win;
+  briefingReady = false;
   win.once("ready-to-show", () => {
+    if (win.isDestroyed()) return;
+    briefingReady = true;
     win.show();
     console.log("[waypoint] briefing window opened");
   });
@@ -262,13 +267,12 @@ function createBriefingWindow(): void {
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   win.webContents.on("will-redirect", (event) => event.preventDefault());
   win.on("closed", () => {
-    briefingWindow = null;
+    if (briefingWindow === win) { briefingWindow = null; briefingReady = false; }
   });
 
   if (DEV_SERVER_URL) void win.loadURL(`${DEV_SERVER_URL}?window=briefing`);
   else void win.loadFile(path.join(__dirname, "../dist/index.html"), { query: { window: "briefing" } });
 
-  briefingWindow = win;
 }
 
 /* ------------------------------------------------------------------ tray */
@@ -488,11 +492,11 @@ if (!gotLock) {
       handleProtocolUrl(url);
       return;
     }
-    if (argv.includes(STARTUP_ARG)) {
+    // second-instance can arrive while the first instance is still starting.
+    void app.whenReady().then(() => {
+      if (!argv.includes(STARTUP_ARG)) showMainWindow();
       if (readBriefingPreference()) createBriefingWindow();
-      return;
-    }
-    showMainWindow();
+    });
   });
 
   // macOS protocol activation (Windows arrives through second-instance/argv).
@@ -513,13 +517,10 @@ if (!gotLock) {
       `[waypoint] main ready — startupLaunch=${isStartupLaunch} tray=${tray !== null} briefingAtLogin=${briefingPref}`,
     );
 
-    if (isStartupLaunch) {
-      // A — Windows login: tray-dormant launch, briefing popup per preference.
-      if (briefingPref) createBriefingWindow();
-    } else {
-      // B — manual launch: full console, no briefing.
-      createMainWindow(true);
-    }
+    // Windows login remains tray-dormant; a normal launch shows the console.
+    // Both launch paths independently show the briefing when enabled.
+    if (!isStartupLaunch) createMainWindow(true);
+    if (briefingPref) createBriefingWindow();
 
     // Background reminder engine — runs regardless of window visibility.
     startScheduler({

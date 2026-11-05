@@ -560,6 +560,11 @@ termination, window destruction, and process exit invalidate it. Closing to
 tray retains the session. Tray directives wait until the authenticated console
 is ready. Console persistence is not hydrated before authentication.
 
+The Daily Briefing opens automatically on normal app launches and Windows
+startup when the existing `briefingAtLogin` preference is enabled. Disabling
+that preference suppresses automatic opening; the Settings preview remains
+available.
+
 The login screen can request only the local appearance preference and the auth
 operations. The separate Daily Briefing window can request a read-only,
 minimized snapshot needed for its display, open the console, or dismiss itself;
@@ -584,3 +589,7 @@ IPC/session integration, reminder, and recurrence tests. The IPC suite executes
 real handlers against mocked Electron objects; it does **not** replace testing
 in a real Electron runtime or on Windows. Windows startup, tray, notifications,
 renderer reload, and briefing behavior should be validated on Windows separately.
+
+For browser-level authentication UI checks, start the Vite dev server and run
+`npm run test:auth-ui` with Playwright Chromium installed. These checks use a
+mock desktop bridge and do not replace Electron or Windows integration tests.
