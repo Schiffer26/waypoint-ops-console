@@ -11,7 +11,7 @@ try {
       const originalClick = HTMLInputElement.prototype.click;
       HTMLInputElement.prototype.click = function() {
         if (this.type === 'file' && window.settingsTest.simulatePicker) {
-          window.dispatchEvent(new Event('blur'));
+          if (window.settingsTest.simulatePicker !== 'silent') window.dispatchEvent(new Event('blur'));
           return;
         }
         return originalClick.call(this);
@@ -113,6 +113,14 @@ try {
     assert.equal(await fileInput.inputValue(), '');
     await page.evaluate(() => window.dispatchEvent(new Event('blur')));
     await gate.waitFor();
+    await unlock();
+    // A blocked picker with no blur/cancel must not leave an unlimited exception.
+    await page.evaluate(() => { window.settingsTest.simulatePicker = 'silent'; });
+    await page.getByRole('button',{name:'IMPORT JSON'}).click();
+    await page.clock.fastForward(2_100);
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await gate.waitFor();
+    await page.evaluate(() => { window.settingsTest.simulatePicker = true; });
     await unlock();
     // Cancel without a cancel event is covered by the native window-focus fallback.
     await page.getByRole('button',{name:'IMPORT JSON'}).click();

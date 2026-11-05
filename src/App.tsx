@@ -196,11 +196,18 @@ function ConsoleApp() {
     const picker = { blurSeen: false };
     settingsPicker.current = picker;
     window.dispatchEvent(new Event("waypoint:settings-picker-state"));
-    return () => {
+    // If a blocked picker never blurs or fires cancel/change, fail closed rather
+    // than leaving the exception active indefinitely.
+    const watchdog = window.setTimeout(() => {
+      if (settingsPicker.current === picker && !picker.blurSeen) finish();
+    }, 2000);
+    const finish = () => {
+      window.clearTimeout(watchdog);
       if (settingsPicker.current !== picker) return;
       settingsPicker.current = null;
       window.dispatchEvent(new Event("waypoint:settings-picker-state"));
     };
+    return finish;
   }, []);
   const captureSettingsAccess = useCallback(() => {
     const generation = settingsGeneration.current;

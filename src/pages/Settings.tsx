@@ -91,7 +91,6 @@ export default function Settings() {
     };
   }, []);
 
-
   const flash = (msg: string) => {
     setSysmsg(msg);
     window.setTimeout(() => setSysmsg(null), 4000);
