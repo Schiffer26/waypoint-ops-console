@@ -39,7 +39,7 @@ try {
     assert.equal(await page.locator('.system-init').count(),0);
     await page.locator('.light-boot-art img').evaluate(img => img.decode());
     const src = await page.locator('.light-boot-art img').getAttribute('src');
-    assert(src.includes('waypoint-emblem.png'));
+    assert(src.includes('waypoint-operations-console-logo.png'));
     assert.equal(await page.evaluate(() => window.startupTest.getStorageCalls()),0);
     await page.waitForTimeout(2800);
     assert(await page.getByRole('main',{name:'WAYPOINT system initialization'}).isVisible());
@@ -132,6 +132,9 @@ try {
     await page.goto('http://127.0.0.1:5173/?window=briefing');
     await page.getByText('DAILY BRIEFING', {exact:false}).first().waitFor({timeout:1500});
     assert.equal(await page.locator('.system-init, .light-boot').count(),0);
+    const briefingEmblem = page.locator('.drag-region img');
+    assert((await briefingEmblem.getAttribute('src')).includes('waypoint-emblem.png'));
+    assert(await briefingEmblem.evaluate(async img => { await img.decode(); return getComputedStyle(img).objectFit === 'contain'; }));
     assert.equal(await page.evaluate(() => window.startupTest.bootSignals),0);
     assert.equal(await page.evaluate(() => window.startupTest.getAttempts()),0);
     await context.close();

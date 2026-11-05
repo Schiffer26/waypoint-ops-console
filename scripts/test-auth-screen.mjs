@@ -21,6 +21,26 @@ try {
     await page.goto('http://127.0.0.1:5173/');
     await page.getByRole('heading',{name:'OPERATOR AUTHENTICATION'}).waitFor();
     await page.waitForFunction(t => document.documentElement.dataset.theme === t, theme);
+    const wordmark = page.locator('.auth-brand > span');
+    const subtitle = wordmark.locator('small');
+    assert.equal(await wordmark.evaluate(el => el.firstChild.textContent), 'WAYPOINT');
+    assert.equal(await subtitle.textContent(), 'PERSONAL OPERATIONS CONSOLE');
+    assert(await wordmark.isVisible());
+    assert(await subtitle.isVisible());
+    // Verify readable foreground contrast against the actual themed header background.
+    for (const text of [wordmark, subtitle]) {
+      const contrast = await text.evaluate(el => {
+        const rgb = value => value.match(/\d+/g).slice(0, 3).map(Number);
+        const luminance = color => rgb(color).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+        const fg = luminance(getComputedStyle(el).color);
+        const bg = luminance(getComputedStyle(document.querySelector('.auth-screen')).backgroundColor);
+        return (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05);
+      });
+      assert(contrast >= 4.5, `header text contrast ${contrast} in ${theme} theme`);
+    }
+    assert(await page.getByText('IDENTITY VERIFICATION', {exact:true}).isVisible());
+    assert(await page.locator('label[for="auth-operator"]').isVisible());
+    assert(await page.locator('label[for="auth-key"]').isVisible());
     for (const selector of ['.auth-mark', '.auth-emblem img']) {
       const image = page.locator(selector);
       assert((await image.getAttribute('src')).includes('waypoint-emblem.png'));
