@@ -13,7 +13,7 @@ try {
         auth:{appearance:async()=>theme, status:async()=>true, create:async()=>{}, verify:async (_operator, key)=>{calls++; await new Promise(r=>setTimeout(r,600)); return key === 'a valid access key';}},
         storage:{read:async()=>null,write:async()=>{},remove:async()=>{}},
         capabilities:async()=>({}), notify:async()=>true,
-        rendererReady:()=>{}, onOpenCreate:()=>()=>{}, onReminderDelivered:()=>()=>{}, onReminderAction:()=>()=>{},
+        bootComplete:()=>{}, rendererReady:()=>{}, onOpenCreate:()=>()=>{}, onReminderDelivered:()=>()=>{}, onReminderAction:()=>()=>{},
       };
       window.authTestCalls = () => calls;
     }, {theme});

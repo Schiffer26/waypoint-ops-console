@@ -1,0 +1,40 @@
+.light-boot { position: relative; height: 100%; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: #f2f2ee; color: #191919; font-family: var(--font-display); }
+.light-boot-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(#1919190c 1px, transparent 1px), linear-gradient(90deg, #1919190c 1px, transparent 1px); background-size: 60px 60px; }
+.light-boot-header, .light-boot-footer { z-index: 1; display: flex; justify-content: space-between; gap: 12px; padding: 23px 4%; color: #777; font: 500 10px var(--font-mono); letter-spacing: .13em; }
+.light-boot-header { border-bottom: 1px solid #d7d7d1; } .light-boot-footer { border-top: 1px solid #d7d7d1; }
+.light-boot-body { position: relative; flex: 1; min-height: 460px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 24px 20px; }
+.light-boot-frame { position: relative; display: grid; place-items: center; width: min(47vh, 360px, 70vw); aspect-ratio: 1; }
+.light-boot-art { position: relative; width: 84%; aspect-ratio: 1; overflow: hidden; box-shadow: 0 0 0 1px #19191918; }
+.light-boot-art img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.light-boot-sweep { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 42%, #fffa0040 50%, transparent 58%); transform: translateX(-120%); }
+.light-boot-axis { position: absolute; background: #19191938; }
+.light-boot-axis-h { width: 122%; height: 1px; top: 50%; } .light-boot-axis-v { height: 120%; width: 1px; left: 50%; }
+.light-boot-bracket { position: absolute; width: 20px; height: 20px; border-color: #191919; z-index: 1; }
+.light-boot-bracket-tl { top: 0; left: 0; border-top: 2px solid; border-left: 2px solid; }
+.light-boot-bracket-br { right: 0; bottom: 0; border-right: 2px solid; border-bottom: 2px solid; }
+.light-boot-measure { position: absolute; top: 38%; font: 9px/1.8 var(--font-mono); color: #777; letter-spacing: .1em; }
+.light-boot-measure-l { left: -15%; } .light-boot-measure-r { right: -15%; text-align: right; }
+.light-boot-caption { display: flex; justify-content: space-between; width: min(360px, 75vw); margin-top: 28px; border-top: 2px solid #191919; padding-top: 9px; color: #666; font: 500 9px var(--font-mono); letter-spacing: .06em; }
+.light-boot-status { display: flex; align-items: center; gap: 8px; margin-top: 26px; min-height: 16px; font: 600 10px var(--font-mono); letter-spacing: .1em; }
+.light-boot-status i { width: 7px; height: 7px; background: #00b879; } .light-boot-status[role="alert"] i { background: #c0a900; }
+.light-boot-progress { width: min(230px, 75vw); height: 3px; margin-top: 12px; overflow: hidden; background: #d7d7d1; }
+.light-boot-progress span { display: block; height: 100%; width: 35%; background: #fffa00; }
+.light-boot-error { text-align: center; font: 11px var(--font-mono); color: #666; } .light-boot-error p { margin: 14px 0; }
+.light-boot-error button { color: #191919; border: 1px solid #aaa; padding: 9px 12px; cursor: pointer; }
+.light-boot-error button:focus-visible, .light-boot-error button:hover { outline: 2px solid #191919; outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) {
+ .light-boot-axis-h { animation: light-axis-h .9s ease-out both; } .light-boot-axis-v { animation: light-axis-v .9s ease-out both; }
+ .light-boot-bracket { animation: light-bracket .9s .15s ease-out both; }
+ .light-boot-art { animation: light-reveal 1.25s .35s ease-out both; }
+ .light-boot-sweep { animation: light-sweep 1.6s .8s ease-out both; }
+ .light-boot-caption { animation: light-caption .8s 1s ease-out both; }
+ .light-boot-progress span { animation: light-progress 1.7s ease-in-out infinite; }
+ @keyframes light-axis-h { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+ @keyframes light-axis-v { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+ @keyframes light-bracket { from { opacity: 0; transform: scale(1.25); } to { opacity: 1; transform: scale(1); } }
+ @keyframes light-reveal { from { opacity: 0; clip-path: inset(0 100% 0 0); } to { opacity: 1; clip-path: inset(0); } }
+ @keyframes light-sweep { to { transform: translateX(120%); } }
+ @keyframes light-caption { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+ @keyframes light-progress { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+}
+@media (max-width: 550px) { .light-boot-header, .light-boot-footer { font-size: 8px; } .light-boot-caption { font-size: 8px; } .light-boot-body { min-height: 400px; } }

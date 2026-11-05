@@ -109,6 +109,7 @@ export interface WaypointBridge {
   briefingDismiss: () => Promise<void>;
   /** Open (or focus) the Daily Briefing window on demand. */
   openBriefing: () => Promise<void>;
+  bootComplete: () => void;
   /** Sent once after the console renderer subscribes to tray directives. */
   rendererReady: () => void;
   /** Main-process push: tray "Add Task / Add Event" requests. Returns an unsubscribe fn. */

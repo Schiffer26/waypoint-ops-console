@@ -62,6 +62,9 @@ const api = {
   briefingDismiss: (): Promise<void> => ipcRenderer.invoke("waypoint:briefing:dismiss"),
   openBriefing: (): Promise<void> => ipcRenderer.invoke("waypoint:briefing:open"),
 
+  /** Presentation completion only; does not grant a session. */
+  bootComplete: (): void => ipcRenderer.send("waypoint:boot-complete"),
+
   /**
    * Readiness handshake: the console renderer sends this once it has
    * subscribed to tray directives, letting the main process flush any

@@ -17,13 +17,14 @@
  * Security: contextIsolation ON, nodeIntegration OFF, sandboxed preload;
  * the renderer only ever sees the typed window.waypoint bridge.
  */
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, screen, Tray } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { operatorExists, createOperator, authenticate, LoginThrottle } from "./auth.js";
 import { ConsoleSession, type SenderContext, type WindowContext } from "./session.js";
 import { briefingSnapshot, appearance } from "./briefing-data.js";
+import { briefingBounds } from "./briefing-position.js";
 import { DB_KEY, STORE_FILE_NAME, parseBriefingPreference } from "./prefs.js";
 import {
   cancelEntryReminders,
@@ -61,6 +62,8 @@ if (process.defaultApp) {
 let mainWindow: BrowserWindow | null = null;
 let briefingWindow: BrowserWindow | null = null;
 let briefingReady = false;
+let consoleBootComplete = false;
+let pendingAutomaticBriefing = false;
 let tray: Tray | null = null;
 let isQuitting = false;
 const session = new ConsoleSession();
@@ -175,10 +178,11 @@ function createMainWindow(show: boolean): BrowserWindow {
   });
 
   rendererReady = false;
+  consoleBootComplete = false;
   session.invalidate();
   win.webContents.on("did-start-navigation", (_event, _url, inPlace, isMainFrame) => {
     if (isMainFrame) {
-      session.invalidate(); rendererReady = false;
+      session.invalidate(); rendererReady = false; consoleBootComplete = false;
       // Same-document navigation retains React memory; reload the trusted entry
       // so a hash/history navigation cannot leave the unlocked UI visible.
       if (inPlace) setImmediate(() => { if (!win.isDestroyed()) void win.loadURL(expectedMainUrl); });
@@ -186,7 +190,10 @@ function createMainWindow(show: boolean): BrowserWindow {
   });
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   win.webContents.on("will-redirect", (event) => event.preventDefault());
-  win.webContents.on("render-process-gone", () => { session.invalidate(); rendererReady = false; });
+  win.webContents.on("render-process-gone", () => { session.invalidate(); rendererReady = false; finishBootFallback(); });
+  win.webContents.on("did-fail-load", (_event, code, _description, _url, isMainFrame) => {
+    if (isMainFrame && code !== -3) finishBootFallback();
+  });
 
   if (show) {
     win.once("ready-to-show", () => {
@@ -207,6 +214,8 @@ function createMainWindow(show: boolean): BrowserWindow {
     session.invalidate();
     mainWindow = null;
     rendererReady = false;
+    consoleBootComplete = false;
+    finishBootFallback();
   });
 
   if (DEV_SERVER_URL) void win.loadURL(DEV_SERVER_URL);
@@ -227,15 +236,31 @@ function showMainWindow(): void {
 }
 
 /* ---------------------------------------------------------- briefing --- */
+function finishBootFallback(): void {
+  // A crashed/destroyed console must not permanently suppress the briefing.
+  if (pendingAutomaticBriefing && !isQuitting) {
+    pendingAutomaticBriefing = false;
+    createBriefingWindow();
+  }
+}
+function requestAutomaticBriefing(): void {
+  if (!readBriefingPreference() || (briefingWindow && !briefingWindow.isDestroyed())) return;
+  if (consoleBootComplete) createBriefingWindow();
+  else pendingAutomaticBriefing = true;
+}
 function createBriefingWindow(): void {
+  // A manual opening also satisfies any pending automatic request.
+  pendingAutomaticBriefing = false;
   if (briefingWindow && !briefingWindow.isDestroyed()) {
     // A second request during load must not show an unpainted window.
     if (briefingReady) { briefingWindow.show(); briefingWindow.focus(); }
     return;
   }
+  const mainBounds = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null;
+  const display = mainBounds ? screen.getDisplayMatching(mainBounds) : screen.getPrimaryDisplay();
+  const bounds = briefingBounds(display.workArea, mainBounds);
   const win = new BrowserWindow({
-    width: 452,
-    height: 648,
+    ...bounds,
     resizable: false,
     maximizable: false,
     minimizable: false,
@@ -417,6 +442,18 @@ function registerIpc(): void {
   ipcMain.handle("waypoint:briefing:dismiss", (event) => { requireBriefing(event); briefingWindow?.close(); });
   ipcMain.handle("waypoint:briefing:open", (event) => { requireAuth(event); createBriefingWindow(); });
 
+  // This is a presentation handshake only: it never grants authentication.
+  ipcMain.on("waypoint:boot-complete", (event) => {
+    try {
+      requireMain(event);
+      consoleBootComplete = true;
+      if (pendingAutomaticBriefing) {
+        pendingAutomaticBriefing = false;
+        if (readBriefingPreference()) createBriefingWindow();
+      }
+    } catch { /* Ignore unrelated or stale renderers. */ }
+  });
+
   /** Console renderer handshake: mounted → subscribed → flush tray queue. */
   ipcMain.on("waypoint:renderer-ready", (event) => {
     try { requireAuth(event); rendererReady = true; flushDirectives(); } catch { /* unauthenticated renderer cannot flush directives */ }
@@ -495,7 +532,8 @@ if (!gotLock) {
     // second-instance can arrive while the first instance is still starting.
     void app.whenReady().then(() => {
       if (!argv.includes(STARTUP_ARG)) showMainWindow();
-      if (readBriefingPreference()) createBriefingWindow();
+      else if (readBriefingPreference() && (!mainWindow || mainWindow.isDestroyed())) showMainWindow();
+      requestAutomaticBriefing();
     });
   });
 
@@ -517,10 +555,10 @@ if (!gotLock) {
       `[waypoint] main ready — startupLaunch=${isStartupLaunch} tray=${tray !== null} briefingAtLogin=${briefingPref}`,
     );
 
-    // Windows login remains tray-dormant; a normal launch shows the console.
-    // Both launch paths independently show the briefing when enabled.
-    if (!isStartupLaunch) createMainWindow(true);
-    if (briefingPref) createBriefingWindow();
+    // Startup with briefing disabled remains tray-dormant. Otherwise the
+    // console boots first; the briefing waits for its completion handshake.
+    if (briefingPref) pendingAutomaticBriefing = true;
+    if (!isStartupLaunch || briefingPref) createMainWindow(true);
 
     // Background reminder engine — runs regardless of window visibility.
     startScheduler({

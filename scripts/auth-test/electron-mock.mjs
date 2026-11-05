@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 export const handlers = new Map();
 export const windows = [];
+export const screen = { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }), getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }) };
 export const ipcMain = new EventEmitter();
 ipcMain.handle = (name, fn) => handlers.set(name, fn);
 export const app = new EventEmitter();
@@ -23,6 +24,7 @@ export class BrowserWindow extends EventEmitter {
   constructor(options) { super(); this.options = options; windows.push(this); }
   loadURL(url) { this.webContents.navigate(new URL(url).href); return Promise.resolve(); }
   loadFile() { throw new Error('test uses dev URL'); }
+  getBounds() { return { x: this.options.x ?? 230, y: this.options.y ?? 80, width: this.options.width, height: this.options.height }; }
   isDestroyed() { return this.destroyed; } isMinimized() { return false; }
   show() { this.visible = true; this.showCount++; } focus() { this.focusCount++; } hide() { this.visible = false; } restore() {}
   close() { const e = { preventDefault() { e.prevented = true; } }; this.emit('close', e); if (!e.prevented) this.destroy(); }

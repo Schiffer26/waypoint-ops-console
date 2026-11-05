@@ -3,17 +3,17 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { handlers, windows, app } from 'electron';
+import { handlers, windows, app, ipcMain } from 'electron';
 
 const scenario = process.argv[2];
-if (!['manual', 'startup', 'disabled'].includes(scenario)) throw new Error('Missing scenario');
-if (scenario === 'startup') process.argv.push('--waypoint-startup');
+if (!['manual', 'startup', 'disabled', 'startup-disabled'].includes(scenario)) throw new Error('Missing scenario');
+if (scenario === 'startup' || scenario === 'startup-disabled') process.argv.push('--waypoint-startup');
 const dir = await mkdtemp(path.join(tmpdir(), 'waypoint-startup-'));
 process.env.WAYPOINT_TEST_DIR = dir;
 process.env.WAYPOINT_TEST = '1';
 process.env.VITE_DEV_SERVER_URL = 'http://localhost:5173/';
 const key = 'waypoint.db.v1';
-const data = {version:4, state:{tasks:[], events:[], categories:[], settings:{briefingAtLogin:scenario !== 'disabled',operatorName:'TEST',theme:'dark',hour24:true}}};
+const data = {version:4, state:{tasks:[], events:[], categories:[], settings:{briefingAtLogin:!scenario.includes('disabled'),operatorName:'TEST',theme:'dark',hour24:true}}};
 const invoke = (name, win, ...args) => Promise.resolve().then(() => handlers.get(`waypoint:${name}`)({sender:win.webContents,senderFrame:win.webContents.mainFrame}, ...args));
 try {
   await writeFile(path.join(dir, 'waypoint-store.json'), JSON.stringify({[key]:JSON.stringify(data)}));
@@ -24,10 +24,29 @@ try {
   if (process.platform === 'win32') assert.equal(app.appUserModelId, 'com.waypoint.console', 'Windows app identity should be registered');
   let briefing = windows.find(w => w.options.title.includes('Daily Briefing'));
   let main = windows.find(w => w.options.title.includes('Personal Operations'));
-  if (scenario === 'disabled') {
+  if (scenario.includes('disabled')) {
+    if (scenario === 'startup-disabled') {
+      assert(!main && !briefing, 'disabled Windows startup remains tray-dormant');
+      globalThis.__waypointDebug.showMainWindow();
+      main = windows.find(w => w.options.title.includes('Personal Operations'));
+    }
     assert(main && !briefing, 'disabled preference must suppress automatic briefing');
   } else {
-    assert(briefing, `${scenario} launch should create the briefing`);
+    assert(main && !briefing, `${scenario} must wait for console boot`);
+    const event = {sender: main.webContents, senderFrame: main.webContents.mainFrame};
+    ipcMain.emit('waypoint:boot-complete', {sender: main.webContents, senderFrame: {}});
+    assert.equal(windows.filter(w => w.options.title.includes('Daily Briefing')).length, 0, 'subframes cannot signal readiness');
+    app.emit('second-instance', {}, ['waypoint']);
+    await new Promise(r => setImmediate(r));
+    assert.equal(windows.filter(w => w.options.title.includes('Daily Briefing')).length, 0, 'repeated launch still waits for boot');
+    ipcMain.emit('waypoint:boot-complete', event);
+    ipcMain.emit('waypoint:boot-complete', event);
+    briefing = windows.find(w => w.options.title.includes('Daily Briefing'));
+    assert(briefing, `${scenario} should open briefing after boot`);
+    const bounds = briefing.getBounds();
+    const center = main.getBounds().x + main.getBounds().width / 2;
+    assert(bounds.x >= 0 && bounds.x + bounds.width <= 1920 && bounds.y >= 0 && bounds.y + bounds.height <= 1080);
+    assert(bounds.x + bounds.width <= center - 250 || bounds.x >= center + 250, 'briefing does not cover the login panel');
     assert.equal(briefing.visible, false, 'briefing stays hidden until ready-to-show');
     globalThis.__waypointDebug.createBriefingWindow();
     assert.equal(briefing.showCount, 0, 'duplicate request must not show before ready');
@@ -51,16 +70,21 @@ try {
     assert.equal(briefing.showCount, beforeShow + 1, 'ready briefing is shown again');
     assert.equal(briefing.focusCount, beforeFocus + 1, 'ready briefing is focused');
   }
-  if (scenario === 'disabled') {
+  if (scenario.includes('disabled')) {
     briefing = windows.find(w => w.options.title.includes('Daily Briefing'));
     assert(briefing, 'manual Settings preview works with preference disabled');
     briefing.emit('ready-to-show');
   }
   assert.equal(windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing')).length, 1);
   assert(briefing.visible);
-  if (scenario !== 'disabled') {
+  if (!scenario.includes('disabled')) {
     app.emit('second-instance', {}, ['waypoint']);
     await new Promise(r => setImmediate(r));
+    assert.equal(windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing')).length, 1);
+    main.hide();
+    app.emit('second-instance', {}, ['waypoint', '--waypoint-startup']);
+    await new Promise(r => setImmediate(r));
+    assert.equal(main.visible, false, 'startup activation does not expose an existing tray-hidden console');
     assert.equal(windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing')).length, 1);
   }
   briefing.destroy();

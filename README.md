@@ -132,7 +132,7 @@ Rules implemented in `electron/main.ts`:
 
 | Rule | Behaviour                                                                             |
 | ---- | ------------------------------------------------------------------------------------- |
-| A    | Login launch → tray-dormant; briefing opens when `settings.briefingAtLogin` is on      |
+| A    | Login launch → console boots first; briefing opens when `settings.briefingAtLogin` is on      |
 | B    | Manual launch → full dashboard, no briefing                                            |
 | C    | Briefing dismiss / console close → window hides; app keeps running via the tray        |
 | D    | Tray **Quit WAYPOINT** → `isQuitting` flag, normal process termination                 |
@@ -560,8 +560,10 @@ termination, window destruction, and process exit invalidate it. Closing to
 tray retains the session. Tray directives wait until the authenticated console
 is ready. Console persistence is not hydrated before authentication.
 
-The Daily Briefing opens automatically on normal app launches and Windows
-startup when the existing `briefingAtLogin` preference is enabled. Disabling
+The Daily Briefing opens automatically after console initialization and its
+boot animation on normal launches and Windows startup when the existing
+`briefingAtLogin` preference is enabled. Windows startup remains tray-dormant
+when that preference is disabled. Disabling
 that preference suppresses automatic opening; the Settings preview remains
 available.
 
