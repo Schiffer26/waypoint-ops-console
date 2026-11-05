@@ -28,6 +28,7 @@ try {
     assert.equal(briefing.visible, false, 'briefing stays hidden until ready-to-show');
     globalThis.__waypointDebug.createBriefingWindow();
     assert.equal(briefing.showCount, 0, 'duplicate request must not show before ready');
+    assert.equal(briefing.focusCount, 0, 'duplicate request must not focus before ready');
     assert.equal(windows.filter(w => w.options.title.includes('Daily Briefing')).length, 1);
     briefing.emit('ready-to-show');
     assert.equal(briefing.visible, true);
@@ -40,7 +41,13 @@ try {
   }
   assert(main);
   await invoke('auth:create', main, 'operator', 'strong access key');
+  const beforeShow = briefing?.showCount;
+  const beforeFocus = briefing?.focusCount;
   await invoke('briefing:open', main); // Settings uses this same IPC
+  if (briefing) {
+    assert.equal(briefing.showCount, beforeShow + 1, 'ready briefing is shown again');
+    assert.equal(briefing.focusCount, beforeFocus + 1, 'ready briefing is focused');
+  }
   if (scenario === 'disabled') {
     briefing = windows.find(w => w.options.title.includes('Daily Briefing'));
     assert(briefing, 'manual Settings preview works with preference disabled');
@@ -57,8 +64,37 @@ try {
   await invoke('briefing:open', main);
   const replacement = windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing'));
   assert.equal(replacement.length, 1, 'briefing can reopen after close');
-  replacement[0].emit('ready-to-show');
-  assert(replacement[0].visible);
+  const next = replacement[0];
+  assert.equal(next.visible, false, 'replacement must wait for ready-to-show');
+  await invoke('briefing:open', main);
+  assert.equal(next.showCount, 0, 'closed window readiness must not leak to replacement');
+  assert.equal(next.focusCount, 0, 'replacement must not be focused during load');
+  assert.equal(windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing')).length, 1);
+  // A stale closed event must not clear the current window or its readiness.
+  briefing.emit('closed');
+  await invoke('briefing:open', main);
+  assert.equal(next.showCount, 0);
+  assert.equal(next.focusCount, 0);
+  assert.equal(windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing')).length, 1);
+  next.emit('ready-to-show');
+  assert(next.visible);
+  await invoke('briefing:open', main);
+  assert.equal(next.showCount, 2, 'ready replacement can be shown');
+  assert.equal(next.focusCount, 1, 'ready replacement can be focused');
+  next.destroy();
+  await invoke('briefing:open', main);
+  const loading = windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing'))[0];
+  loading.destroy(); // close before the first paint
+  loading.emit('ready-to-show');
+  assert.equal(loading.showCount, 0, 'a destroyed window must not show on a late ready event');
+  await invoke('briefing:open', main);
+  const final = windows.filter(w => !w.destroyed && w.options.title.includes('Daily Briefing'));
+  assert.equal(final.length, 1, 'closing during load allows one fresh window');
+  await invoke('briefing:open', main);
+  assert.equal(final[0].showCount, 0);
+  assert.equal(final[0].focusCount, 0);
+  final[0].emit('ready-to-show');
+  assert(final[0].visible);
   app.emit('before-quit');
   console.log(`Briefing ${scenario} startup/Settings/security lifecycle passed (mock Electron)`);
 } finally { await rm(dir, {recursive:true, force:true}); }
